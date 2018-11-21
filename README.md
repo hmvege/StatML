@@ -1,6 +1,8 @@
 # Repository for machine learning methods
 
-Methods mostly learned through the [FYSSTK3150/4150 course](https://compphysics.github.io/MachineLearning/doc/web/course.html).
+Methods mostly learned through the [FYSSTK3150/4150 course](https://compphysics.github.io/MachineLearning/doc/web/course.html) and some [INF4820(now called INF4080)](https://www.uio.no/studier/emner/matnat/ifi/IN4080/index.html). 
+
+Goal is to use this repository as way of refreshing and teaching myself new methods.
 
 
 #### Folder structure
