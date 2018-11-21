@@ -12,6 +12,9 @@ OPTIMIZERS = ["GradientDescent", "LogRegGradientDescent",
 OPTIMIZERS_KEYWORDS = ["lr-gd", "gd", "cg", "sga", "sga-mb", "nr", "newton-cg"]
 
 
+# TODO: jit what can be jitted
+
+
 class _OptimizerBase(abc.ABC):
     """Base class for optimization."""
 

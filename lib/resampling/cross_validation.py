@@ -4,7 +4,9 @@ import copy as cp
 from tqdm import tqdm
 
 try:
-    import lib.metrics as metrics
+    import sys
+    sys.path.insert(0, "../")
+    from utils import metrics 
 except ModuleNotFoundError:
     import metrics
 
@@ -13,6 +15,9 @@ import sklearn.metrics as sk_metrics
 
 __all__ = ["kFoldCrossValidation", "MCCrossValidation"]
 
+# TODO: parallelize kf-CV
+# TODO: parallelize kkf-CV
+# TODO: parallelize mc-kf-CV
 
 class __CV_core:
     """Core class for performing k-fold cross validation."""

@@ -17,6 +17,8 @@ AVAILABLE_COST_FUNCTIONS = ["mse", "log_loss", "exponential_cost",
 
 AVAILABLE_REGULARIZATIONS = ["l1", "l2", "elastic_net"]
 
+# TODO: jit what can be jitted
+
 # =============================================================================
 # ACTIVATION FUNCTIONS
 # =============================================================================

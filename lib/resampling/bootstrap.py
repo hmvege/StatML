@@ -4,7 +4,9 @@ import copy as cp
 from tqdm import tqdm
 
 try:
-    import lib.metrics as metrics
+    import sys
+    sys.path.insert(0, "../")
+    import utils.metrics as metrics
 except ModuleNotFoundError:
     import metrics
 
@@ -12,47 +14,21 @@ import sklearn.model_selection as sk_modsel
 import sklearn.utils as sk_utils
 import sklearn.metrics as sk_metrics
 
-import multiprocessing
+import numba as nb
+import multiprocessing as mp
 
-
-def _para_bs(X_train, y_train, X_test, y_test, reg):
-    # Bootstraps test data
-    # x_boot, y_boot = boot(x_train, y_train)
-
-    X_boot, y_boot = boot(X_train, y_train)
-    # X_boot, y_boot = sk_utils.resample(X_train, y_train)
-    # Sets up design matrix
-    # X_boot = self._design_matrix(x_boot)
-
-    # Fits the bootstrapped values
-    reg.fit(X_boot, y_boot)
-
-    # Tries to predict the y_test values the bootstrapped model
-    y_predict = reg.predict(X_test)
-
-    return [
-        sk_metrics.r2_score(y_test, y_predict),  # Calculates r2
-        y_predict.ravel(),
-        reg.coef_,  # Stores the prediction and beta coefs.
-    ]
-
-
+@nb.njit(cache=True)
 def boot(*data):
-    """Strip-down version of the bootstrap method.
+    """Strip-down version of the bootstrap method. Compiled with numba's njit.
 
     Args:
         *data (ndarray): list of data arrays to resample.
 
     Return:
         *bs_data (ndarray): list of bootstrapped data arrays."""
-
     N_data = len(data)
     N = data[0].shape[0]
-    # assert np.all(np.array([len(d) for d in data]) == N), \
-    #     "unequal lengths of data passed."
-
-    index_lists = np.random.randint(N, size=N)
-
+    index_lists = np.array([np.random.randint(N) for i in range(N)])
     return [d[index_lists] for d in data]
 
 
@@ -81,7 +57,7 @@ class BootstrapRegression:
 
         self.X_data = cp.deepcopy(X_data)
         self.y_data = cp.deepcopy(y_data)
-        self._reg = reg
+        self.reg = reg
 
     @property
     def reg(self):
@@ -107,9 +83,28 @@ class BootstrapRegression:
     def coef_var(self):
         return self.beta_coefs_var
 
+    @staticmethod
+    def _para_bs(input_values):
+        X_train, y_train, X_test, y_test, reg = input_values
+        # Bootstraps test data
+        X_boot, y_boot = boot(X_train, y_train)
+
+        # Fits the bootstrapped values
+        reg.fit(X_boot, y_boot)
+
+        # Tries to predict the y_test values the bootstrapped model
+        y_predict = reg.predict(X_test)
+
+        return [
+            sk_metrics.r2_score(y_test, y_predict),  # Calculates r2
+            y_predict.ravel(),
+            reg.coef_,  # Stores the prediction and beta coefs.
+        ]
+
+
     @metrics.timing_function
     def bootstrap(self, N_bs, test_percent=0.25, X_test=None, y_test=None,
-                  shuffle=False):
+                  shuffle=False, numprocs=0):
         """
         Performs a bootstrap for a given regression type, design matrix 
         function and excact function.
@@ -155,89 +150,83 @@ class BootstrapRegression:
 
         # Sets up emtpy lists for gathering the relevant scores in
         r2_list = np.empty(N_bs)
-        beta_coefs = []
+        # print(N_bs, X_train.shape[-1], y_train.shape, X_train.shape)
+        # exit(1)
+        beta_coefs = np.empty((N_bs, y_train.shape[-1], X_test.shape[-1]))
 
         y_pred_list = np.empty((X_test.shape[0], N_bs))
 
-        # # Sets up jobs for parallel processing
-        # input_values = list(zip([X_train for i in range(N_bs)],
-        #                    [y_train for i in range(N_bs)],
-        #                    [X_test for i in range(N_bs)],
-        #                    [y_test for i in range(N_bs)],
-        #                    [cp.deepcopy(self.reg) for i in range(N_bs)]))
-        # print (input_values[0])
-        # # Initializes multiprocessing
-        # pool = multiprocessing.Pool(processes=4)
+        if numprocs != 0:
+            # Initializes multiprocessing
+            with mp.Pool(processes=numprocs) as p:
 
-        # # Runs parallel processes. Can this be done more efficiently?
-        # results = pool.map(_para_bs, input_values)
-        # print (results)
-        # # [sk_metrics.r2_score(y_test, y_predict),
-        # #     y_predict.ravel(),
-        # #     reg.coef_]
+                # Sets up jobs for parallel processing
+                input_values = list(zip([X_train for i in range(N_bs)],
+                                   [y_train for i in range(N_bs)],
+                                   [X_test for i in range(N_bs)],
+                                   [y_test for i in range(N_bs)],
+                                   [self.reg for i in range(N_bs)]))
+                    
 
-        # # Garbage collection for multiprocessing instance
-        # pool.close()
+                # Runs parallel processes. Can this be done more efficiently?
+                # import time
+                # t0 = time.time()
+                results = p.imap_unordered(self._para_bs, input_values, chunksize=N_bs//numprocs)
+                # t1 = time.time()
+                # print("TIME imap_unordered:", t1-t0)
 
-        # Bootstraps
-        for i_bs in tqdm(range(N_bs), desc="Bootstrapping"):
-            # Bootstraps test data
-            # x_boot, y_boot = boot(x_train, y_train)
+                # t2 = time.time()
+                # results = p.map(self._para_bs, input_values, chunksize=N_bs//numprocs)
+                # t3 = time.time()
+                # print("TIME map:", t3-t2)
 
-            X_boot, y_boot = boot(X_train, y_train)
-            # X_boot, y_boot = sk_utils.resample(X_train, y_train)
-            # Sets up design matrix
-            # X_boot = self._design_matrix(x_boot)
+                # t4 = time.time()
+                # results = p.map_async(self._para_bs, input_values, chunksize=N_bs//numprocs).get()
+                # t5 = time.time()
+                # print("TIME map_async:", t5-t4)
 
-            # Fits the bootstrapped values
-            self.reg.fit(X_boot, y_boot)
+                # Populates result lists
+                for i_bs, res_ in enumerate(results):
+                    r2_list[i_bs] = res_[0]
+                    y_pred_list[:, i_bs] = res_[1].ravel()
+                    beta_coefs[i_bs] = res_[2]
+                
 
-            # Tries to predict the y_test values the bootstrapped model
-            y_predict = self.reg.predict(X_test)
+        else:
+            # Bootstraps
+            for i_bs in tqdm(range(N_bs), desc="Bootstrapping"):
+                # Bootstraps test data
+                X_boot, y_boot = boot(X_train, y_train)
 
-            # Calculates r2
-            # r2_list[i_bs] = metrics.r2(y_test, y_predict)
-            r2_list[i_bs] = sk_metrics.r2_score(y_test, y_predict)
+                # Fits the bootstrapped values
+                self.reg.fit(X_boot, y_boot)
 
-            # mse_list[i_bs] = metrics.mse(y_predict, y_test)
-            # bias_list[i_bs] = metrics.bias(y_predict, y_test)
-            # var_list[i_bs] = np.var(y_predict)
+                # Tries to predict the y_test values the bootstrapped model
+                y_predict = self.reg.predict(X_test)
 
-            # Stores the prediction and beta coefs.
-            y_pred_list[:, i_bs] = y_predict.ravel()
-            beta_coefs.append(self.reg.coef_)
+                # Calculates r2
+                # r2_list[i_bs] = metrics.r2(y_test, y_predict)
+                r2_list[i_bs] = sk_metrics.r2_score(y_test, y_predict)
+
+                # Stores the prediction and beta coefs.
+                y_pred_list[:, i_bs] = y_predict.ravel()
+                beta_coefs[i_bs] = self.reg.coef_
 
         # pred_list_bs = np.mean(y_pred_list, axis=0)
 
         # R^2 score, 1 - sum(y-y_approx)/sum(y-mean(y))
         self.r2 = np.mean(r2_list)
 
-        # Mean Square Error, mean((y - y_approx)**2)
-        # _mse = np.mean((y_test.ravel() - y_pred_list)**2,
-        #                axis=0, keepdims=True)
-
-        # _mse = np.mean((y_test - y_pred_list)**2,
-        #                axis=1, keepdims=True)
-        # self.mse = np.mean(_mse)
-
-        # # Bias, (y - mean(y_approx))^2
-        # _y_pred_mean = np.mean(y_pred_list, axis=1, keepdims=True)
-        # self.bias = np.mean((y_test - _y_pred_mean)**2)
-
-        # # Variance, var(y_approx)
-        # self.var = np.mean(np.var(y_pred_list,
-        #                           axis=1, keepdims=True))
-
+        # Bias, (y - mean(y_approx))^2
         _y_pred_mean = np.mean(y_pred_list, axis=1, keepdims=True)
         self.bias = np.mean((y_test - _y_pred_mean)**2)
 
         # Variance, var(y_approx)
         self.var = np.mean(np.var(y_pred_list, axis=1, keepdims=True))
 
+        # Mean Square Error, mean((y - y_approx)**2)
         self.mse = np.mean(
             np.mean((y_test - y_pred_list)**2, axis=1, keepdims=True))
-        # self.bias = np.mean(
-        #     y_test - np.mean(y_pred_list, axis=1, keepdims=True))**2
 
         beta_coefs = np.asarray(beta_coefs)
 
@@ -249,7 +238,7 @@ class BootstrapRegression:
 
 
 def BootstrapWrapper(X_train, y_train, reg, N_bs, test_percent=0.4,
-                     X_test=None, y_test=None, shuffle=False):
+                     X_test=None, y_test=None, shuffle=False, numprocs=0):
     """
     Wrapper for manual bootstrap method.
     """
@@ -266,7 +255,7 @@ def BootstrapWrapper(X_train, y_train, reg, N_bs, test_percent=0.4,
 
     bs_reg = BootstrapRegression(X_train, y_train, reg)
     bs_reg.bootstrap(N_bs, test_percent=test_percent, X_test=X_test,
-                     y_test=y_test)
+                     y_test=y_test, numprocs=numprocs)
 
     return {
         "r2": bs_reg.r2, "mse": bs_reg.mse, "bias": bs_reg.bias,
@@ -386,7 +375,7 @@ def __test_bootstrap_fit():
     # Performs a bootstrap
     print("Bootstrapping")
     bs_reg = BootstrapRegression(X, y, OLSRegression())
-    bs_reg.bootstrap(N_bs, test_percent=test_percent)
+    bs_reg.bootstrap(N_bs, test_percent=test_percent, numprocs=4)
 
     print("r2:    {:-20.16f}".format(bs_reg.r2))
     print("mse:   {:-20.16f}".format(bs_reg.mse))
@@ -418,8 +407,6 @@ def __test_bias_variance_bootstrap():
     from regression import OLSRegression
     import sklearn.preprocessing as sk_preproc
     import matplotlib.pyplot as plt
-    import copy as cp
-
     import sklearn.linear_model as sk_model
 
     np.random.seed(2018)
@@ -528,12 +515,14 @@ def __test_compare_bootstrap_manual_sklearn():
     from regression import OLSRegression
     import sklearn.linear_model as sk_model
     import sklearn.preprocessing as sk_preproc
-    import copy as cp
+    import time
 
     deg = 2
     poly = sk_preproc.PolynomialFeatures(degree=deg, include_bias=True)
 
-    N_bs = 1000
+    N_processsors=8
+
+    N_bs = 10000
 
     # Initial values
     n = 200
@@ -549,12 +538,19 @@ def __test_compare_bootstrap_manual_sklearn():
 
     X = poly.fit_transform(x)
 
+    t0 = time.time()
     bs_my = BootstrapWrapper(
         cp.deepcopy(X), cp.deepcopy(y), sk_model.LinearRegression(), N_bs,
-        test_percent=test_percent)
+        test_percent=test_percent, numprocs=N_processsors)
+    t1 = time.time()
+    print("MANUAL BS METHOD TIME:   ", t1-t0)
+
+    t2 = time.time()
     bs_sk = SKLearnBootstrap(
         cp.deepcopy(X), cp.deepcopy(y), sk_model.LinearRegression(), N_bs,
         test_percent=test_percent)
+    t3 = time.time()
+    print("SK-LEARN BS METHOD TIME: ", t3-t2)
 
     print("Manual:")
     print("r2:", bs_my["r2"], "mse:", bs_my["mse"], "var:", bs_my["var"],

@@ -5,6 +5,9 @@ import numpy as np
 __all__ = ["mse", "r2", "bias", "timing_function"]
 
 
+# TODO: jit what can be jitted
+
+
 def mse(y_exact, y_predict, axis=None):
     """Mean Square Error
 

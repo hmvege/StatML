@@ -4,6 +4,7 @@ import numpy as np
 import scipy
 import copy as cp
 import warnings
+import numba as nb
 try:
     import utils.math_tools as umath
     import utils.optimize as uopt
@@ -16,9 +17,9 @@ except ModuleNotFoundError:
 
 # TODO: validate SGD without minibatches
 # TODO: validate SGD with minibatches
-# TODO: implement momentum
-# TODO: clean up cost function - move outside?
+# TODO: implement momentum(see lecture notes on cd with momentum)
 # TODO: parallized logreg
+# TODO: jit what can be jitted
 # TODO: make optimizers take penalty argument?
 
 
@@ -201,7 +202,7 @@ class LogisticRegression:
         loss += (0.5*self.alpha*np.dot(weights, weights))
         return loss
 
-        # y_pred = self._predict(X, weights)
+        # y_pred = self._predict_linear(X, weights)
 
         # p_probabilities = self._activation(y_pred)
 
@@ -224,7 +225,7 @@ class LogisticRegression:
         # loss = - X.T @ (y - p_) + self.alpha * weights
         # return loss
 
-        grad = np.dot(X.T, (self._activation(self._predict(X, weights)) - y))
+        grad = np.dot(X.T, (self._activation(self._predict_linear(X, weights)) - y))
 
         # Adds regularization
         grad += self.alpha*weights
@@ -238,10 +239,12 @@ class LogisticRegression:
         where
             W = p(1 - X^T * w) * p(X^T * w)
         """
-        y_pred = self._predict(X, w)
+        y_pred = self._predict_linear(X, w)
         return X.T @ self._activation(1-y_pred) @ self._activation(y_pred) @ X
 
-    def _predict(self, X, weights):
+    @staticmethod
+    @nb.njit(cache=True)
+    def _predict_linear(X, weights):
         """Performs a regular fit of parameters and sends them through 
         the sigmoid function.
 
@@ -291,7 +294,8 @@ class LogisticRegression:
         X = np.hstack([np.ones((X.shape[0], 1)), X])
 
         # Retrieves probabilitites
-        probabilities = self._activation(self._predict(X, self.coef)).ravel()
+        probabilities = \
+            self._activation(self._predict_linear(X, self.coef)).ravel()
 
         # Sets up binary probability
         results_proba = np.asarray([1 - probabilities, probabilities])
@@ -310,7 +314,8 @@ class LogisticRegression:
             raise UserWarning("Fit not performed.")
 
         X = np.hstack([np.ones((X.shape[0], 1)), X])
-        probabilities = self._activation(self._predict(X, self.coef)).ravel()
+        probabilities = \
+            self._activation(self._predict_linear(X, self.coef)).ravel()
         results = np.asarray([1 - probabilities, probabilities])
 
         return np.moveaxis(results, 0, 1)

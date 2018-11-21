@@ -11,9 +11,6 @@ except ModuleNotFoundError:
 
 __all__ = ["OLSRegression", "RidgeRegression", "LassoRegression"]
 
-# TODO: parallized linreg
-
-
 
 class __RegBackend:
     """Backend class in case we want to run with either scipy, numpy 
@@ -34,33 +31,6 @@ class __RegBackend:
 
     def fit(self, X_train, y_train):
         raise NotImplementedError("Derived class missing fit()")
-
-    def _inv(self, M):
-        """Method for taking derivatives with either numpy or scipy."""
-
-        # raise DeprecationWarning(("Standard matrix inversion method has "
-        #                           "been set to numpy.linalg.svd, as that is "
-        #                           "compatible with numpy's nopython flag."))
-
-        if self.linalg_backend == "numpy":
-
-            if self.inverse_method == "inv":
-                return np.linalg.inv(M)
-
-            elif self.inverse_method == "svd":
-                U, S, VH = np.linalg.svd(M)
-                S = np.diag(1.0/S)
-                return U @ S @ VH
-
-        elif self.linalg_backend == "scipy":
-
-            if self.inverse_method == "inv":
-                return scipy.linalg.inv(M)
-
-            elif self.inverse_method == "svd":
-                U, S, VH = scipy.linalg.svd(M)
-                S = np.diag(1.0/S)
-                return U @ S @ VH
 
     def _check_if_fitted(self):
         """Small check if fit has been performed."""
@@ -91,6 +61,11 @@ class __RegBackend:
                 ("Class {:s} does not contain "
                     "y_variance.".format(self.__class__)))
 
+    @staticmethod
+    @nb.njit(cache=True)
+    def _predict(X, weights):
+        return X @ weights
+
     def predict(self, X_test):
         """Performs a prediction for given beta coefs.
 
@@ -101,7 +76,7 @@ class __RegBackend:
             ndarray: test values for X_test
         """
         self._check_if_fitted()
-        return X_test @ self.coef
+        return self._predict(X_test, self.coef)
 
     def get_results(self):
         """Method for retrieving results from fit.
@@ -160,7 +135,7 @@ class OLSRegression(__RegBackend):
         super().__init__(**kwargs)
 
     @staticmethod
-    @nb.jit(nopython=True, cache=True)
+    @nb.njit(cache=True)
     def _ols_base(X_train, y_train):
         # N samples, P features
         N, P = X_train.shape
@@ -194,7 +169,6 @@ class OLSRegression(__RegBackend):
         return N, P, XTX, XTX_inv, coef, y_approx, y_approx, \
             eps, y_variance, coef_cov, coef_var
 
-
     def fit(self, X_train, y_train):
         """Fits/trains y_train with X_train using Linear Regression.
 
@@ -226,7 +200,7 @@ class RidgeRegression(__RegBackend):
         self.alpha = alpha
 
     @staticmethod
-    @nb.jit(nopython=True, cache=True)
+    @nb.njit(cache=True)
     def _ridge_base(X_train, y_train, alpha):
         # N samples, P features
         N, P = X_train.shape
@@ -264,7 +238,6 @@ class RidgeRegression(__RegBackend):
 
         return N, P, XTX_aI, XTX_aI_inv, coef, y_approx, y_approx, \
             eps, y_variance, coef_cov, coef_var
-
 
     def fit(self, X_train, y_train):
         """Fits/trains y_train with X_train using Ridge Regression.
@@ -372,7 +345,6 @@ def __test_lasso_regression(x, y, deg, alpha=0.1):
     sk_reg.fit(X, y)
     print("SciKit Lasso regression")
     print("R^2: {:.16f}".format(sk_reg.score(X, y)))
-
 
 
 if __name__ == '__main__':

@@ -498,7 +498,7 @@ def __test_mlp_mnist():
     import gzip
     import pickle
 
-    test_data_path = "datafiles/HandwritingClassification/mnist.pkl"
+    test_data_path = "../datafiles/HandwritingClassification/mnist.pkl"
     with open(test_data_path, "rb") as f:
         u = pickle._Unpickler(f)
         u.encoding = "latin1"
