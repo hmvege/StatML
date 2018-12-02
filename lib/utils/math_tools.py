@@ -3,6 +3,7 @@
 import numpy as np
 import abc
 from scipy.special import expit
+import numba as nb
 
 AVAILABLE_ACTIVATIONS = ["identity", "sigmoid", "relu", "tanh", "heaviside"]
 
@@ -65,7 +66,6 @@ def softmax(z):
         x (ndarray): weighted sum of inputs.
     """
 
-    # z_exp = np.exp(x)
     z_exp = np.exp((z - np.max(z)))
     return z_exp/np.sum(z_exp)
 
@@ -77,9 +77,10 @@ def softmax_derivative(x):
         x (ndarray): weighted sum of inputs.
     """
 
-    S = softmax(x).reshape(-1,1)
+    S = softmax(x).reshape(-1, 1)
     # return S - np.einsum("i...,j...->i...", S, S)
-    return (np.diagflat(S) - np.dot(S, S.T)).sum(axis=1,keepdims=True)
+    return (np.identity(S.shape[0]) - np.dot(S, S.T)).sum(axis=1,
+                                                          keepdims=True)
 
 
 def heaviside(x):
@@ -147,7 +148,7 @@ class _BaseCost:
     """Base cost function class."""
     @staticmethod
     @abc.abstractmethod
-    def __call__(a, y):
+    def cost(a, y):
         """Returns cost function.
 
         Args:
@@ -166,7 +167,8 @@ class _BaseCost:
 
 class MSECost(_BaseCost):
     @staticmethod
-    def __call__(a, y):
+    @nb.njit(cache=True)
+    def cost(a, y):
         """Returns cost function.
 
         Args:
@@ -175,16 +177,24 @@ class MSECost(_BaseCost):
         Return:
             (float): cost function output.
         """
-        return 0.5*np.mean(np.linalg.norm(a - y, axis=1)**2, axis=0)
+        return 0.5*np.linalg.norm(a - y)**2 / float(a.shape[0])
+        # return 0.5*np.mean(np.linalg.norm(a - y, axis=1)**2, axis=0)
 
     @staticmethod
+    @nb.njit(cache=True)
     def delta(a, y, a_prime):
         return (a - y) * a_prime
 
 
 class LogEntropyCost(_BaseCost):
+    """
+    Cross entropy cost function.
+
+    Only to be used with softmax output layer.
+    """
     @staticmethod
-    def __call__(a, y):
+    @nb.njit(cache=True)
+    def cost(a, y):
         """Returns cost function.
 
         Args:
@@ -193,17 +203,19 @@ class LogEntropyCost(_BaseCost):
         Return:
             (float): cost function output.
         """
-        return - np.mean(y*np.log(a))# + (1 - y)*np.log(1 - a))
+        return - np.mean(y*np.log(a))  # + (1 - y)*np.log(1 - a))
 
     @staticmethod
+    @nb.njit(cache=True)
     def delta(a, y, a_prime):
-        return a - y # For softmax
+        return a - y  # For softmax
         # return (- y / a) * a_prime # General expr, still a bit bugged smh
 
 
 class ExponentialCost(_BaseCost):
     """Exponential cost function."""
     @staticmethod
+    # @nb.njit(cache=True)
     def cost(a, y, tau=0.1):
         """Returns cost function.
 
@@ -216,9 +228,10 @@ class ExponentialCost(_BaseCost):
         return tau*np.exp(1/tau * np.sum((y-y_true)**2))
 
     @staticmethod
+    # @nb.njit(cache=True)
     def delta(a, y, a_prime, tau=0.1):
         """Exponential cost function gradient."""
-        return 2/tau * (y-y_true)*exponential_cost(y, y_true, tau) * a_prime
+        return 2/tau * (y-y_true)*self.cost(y, y_true, tau) * a_prime
 
 
 # =============================================================================
@@ -252,12 +265,9 @@ def _l2_derivative(weights):
 
 
 def _elastic_net(weights):
-    """The elastic net regularization, L_en = L1 + L2."""
     return np.linalg.norm(weights, ord=1) + 0.5*np.dot(weights, weights)
 
-
 def _elastic_net_derivative(weights):
-    """Derivative of elastic net is just L1 and L2 derivatives combined."""
     return np.sign(weights) + weights
 
 
@@ -276,33 +286,50 @@ class _BaseRegularization:
 
 
 class L1Regularization(_BaseRegularization):
+    """The L1 norm."""
     @staticmethod
     def __call__(weights):
         """Returns the regularization."""
         return np.linalg.norm(weights, ord=1)
 
     @staticmethod
+    @nb.njit(cache=True)
     def derivative(weights):
+        """The derivative of the L1 norm."""
+        # NOTE: Include this in report
+        # https://math.stackexchange.com/questions/141101/
+        # minimizing-l-1-regularization
         return np.sign(weights)
 
 
 class L2Regularization(_BaseRegularization):
+    """The L2 norm."""
     @staticmethod
     def __call__(weights):
         """Returns the regularization."""
         return 0.5*np.dot(weights, weights)
 
     @staticmethod
+    @nb.njit(cache=True)
     def derivative(weights):
+        """The derivative of the L2 norm."""
+        # NOTE: Include this in report
+        # https://math.stackexchange.com/questions/2792390/derivative-of-
+        # euclidean-norm-l2-norm
         return weights
 
 
 class ElasticNetRegularization(_BaseRegularization):
+    """The elastic net regularization, L_en = L1 + L2."""
     @staticmethod
     def __call__(weights):
         """Returns the regularization."""
         return np.linalg.norm(weights, ord=1) + 0.5*np.dot(weights, weights)
 
     @staticmethod
+    @nb.njit(cache=True)
     def derivative(weights):
+        """
+        Derivative of elastic net is just L1 and L2 derivatives combined.
+        """
         return np.sign(weights) + weights

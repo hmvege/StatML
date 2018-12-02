@@ -2,36 +2,201 @@
 
 \usepackage[english]{babel}
 \usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{bm}
 \usepackage{fancyhdr}
 \usepackage{a4wide}
+\usepackage[toc,page]{appendix}
+\usepackage{hyperref}
+
+\newcommand{\e}[1]{\mathrm{e}^{#1}}
+
 
 \pagestyle{fancy}
 
 \title{Neural networks and Back Propagation}
 \author{Hans Mathias Mamen Vege}
 
-\rhead{Mathias M. Vege}
-\lhead{Neural networks and Back Propagation}
+\lhead{Mathias M. Vege}
+\rhead{Neural networks and Back Propagation}
 
 \begin{document}
 \maketitle
 
 \section{Introduction}
-A short presentation on back propagation is given, in the derivation of the back propagation algorithm is given. This is done as an exercise as well as an future reference for the author.
+A short presentation on back propagation is given, in the derivation of the back propagation algorithm is given. This is done as an exercise as well as an future reference for the author. For a note on the notation in this short paper, consult the appendix \ref{app:notation}.
 
 We begin with an short presentation of the layout of a neural network, then we will go through and present different cost functions and different output activations. A presentation of middle layer activations is also given. Then, we will begin deriving the back-propagation and the gradients which will be used to change the weights and biases in a neural network.
 
 \section{A neural network}
+A neural network, more specifically the \textit{Multilayer Perceptron}, is a machine learning method which is takes some data as input and outputs some desired output based on a cost function and labeled training data. A typical would be some sort of classification, e.g. image classification.
+
+A basic neural network consists of an input layer, and $L-1$ hidden layers, where $L$ is the total number of layers in addition to an output layer. For each layer we have a number of neurons, which will take as input the previous layer output, multiply it by some weights and add some biases. Then, it will be send through some activation function and taken as input for the next layer. For a simple neural network with just an input layer one hidden layer we will have two weights and two biases. One for the hidden layer and one for the output layer. To illustrate,
+\begin{align}
+    \bm{a}^1 =& \sigma(\bm{z}^1) = \sigma(W^1 \bm{x} + \bm{b}^1) \label{eq:hidden-layer} \\
+    \hat{\bm{y}} =& \sigma_f(\bm{z}^2) = \sigma_f(W^2 \bm{a}^1 + \bm{b}^2) \label{eq:output-layer}
+\end{align}
+The first equation \eqref{eq:hidden-layer} takes $x$ which is the input data, and multiplies it with the weights matrix for the hidden layer $W_1$, and adds biases $b_1$. Then this is passed through some activation function $\sigma$. The output, $\hat{\bm{y}}$ will be the output of the neural network, and is equivalent to $\bm{a}^L$(or $\bm{a}^2$ for this case). From now on, $\bm{a}^L$ will be used for the output layer. The $z_1$ is simply a collective term for the input to the activation function, and is generalized as
+\begin{align}
+    \bm{z} = W\bm{x} + \bm{b}
+    \label{eq:activation-input}
+\end{align}
+To generalize this notation to any layer $l$, the output of a layer will be given as 
+\begin{align}
+    \bm{a}^l = \sigma(\bm{z}^l) = \sigma(W^l\bm{a}^{l-1} + \bm{b}^l)
+    \label{eq:forward-pass-single-layer}
+\end{align}
+This will be called the \textit{forward pass} of a single layer.
+
+If we extend this model a a full neural network, the final layer output will be,
+\begin{align}
+    \bm{a}^L = \sigma(W^L\bm{a}^{L-1} + \bm{b}^L)
+    \label{eq:final-layer-output}
+\end{align}
+Inserting the previous layer outputs, the full forward pass will be,
+\begin{align}
+    \bm{a}^L = \sigma(W^L\sigma(W^{L-1}\sigma(\cdots \sigma(W^{1}\bm{x} + \bm{b}^1) \cdots) + \bm{b}^{L-1}) + \bm{b}^L)
+    \label{eq:full-forward-pass}
+\end{align}
+With these basics in place, we can now start to consider how one measures how good the network is at prediction.
 
 \section{Cost functions}
+The cost function is a function which measures how good our network predicts an outcome based on some labeled outcome. We which wish to minimize, and in doing so will use stochastic gradient descent and update our weights based on the gradient descent. We will be looking at two main cost functions, the \textit{quadratic cost}(or MSE cost function), or the \textit{cross entropy}.
+
+\subsection{Quadratic cost}
+The quadratic cost, or mean square error (MSE) cost function is given by
+\begin{align}
+    \mathcal{C}_\mathrm{MSE} = \frac{1}{2N} \sum_{i=0}^N ||\bm{a}_i - \bm{y}_i||^2_2,
+    \label{eq:full-mse-cost}
+\end{align}
+where we take Euclidean(or $L^2$ norm) between the final layer output $\bm{a}$ minus the labeled training data $\bm{y}$. The sum $i$ is over all of the training data, $N$. Note, that we will usually ignore the full cost function, since we are mostly dealing with one sample at a time. We then get
+\begin{align}
+    \mathcal{C}_\mathrm{MSE} = \frac{1}{2} ||\bm{a}_i - \bm{y}_i||^2_2,
+    \label{eq:mse-cost}
+\end{align}
+with no notational differences being given.
+
+\subsection{Cross entropy}
+The cross entropy cost function is given by
+\begin{align}
+    \mathcal{C}_\mathrm{CE} = - \frac{1}{N}\sum_{i=0}^{N} \sum^K_{k=1} y_{ik} \ln a_{ik}
+    \label{eq:full-cross-entropy}
+\end{align}
+This is the full cross entropy cost function, which is the average over all the samples $N$. The $K$-sum is a sum over all of the different labels. We will mostly simple use the expression without the explicit sum over all samples,
+\begin{align}
+    \mathcal{C}_\mathrm{CE} = - \sum^K_{k=1} y_{k} \ln a_{k}
+    \label{eq:cross-entropy}
+\end{align}
+
+This cost function has a nice expression in the binary classification case. We have that the sum of the output vector $\bm{y}$ has be equal to one when summed up(since it is a probability, the maximum can be one),
+\begin{align*}
+    \sum^K_{k=0} y_k = 1,
+\end{align*}
+we will in the binary classification case with $K=2$, have
+\begin{align*}
+    \mathcal{C}^2_\mathrm{CE} = - \sum^{K=2}_{k=1} y_{k} \ln a_{k}. \\
+\end{align*}
+Writing this out, we get
+\begin{align*}
+    \mathcal{C}^2_\mathrm{CE} = - y_1 \ln a_1 - y_2 \ln a_2 \\
+\end{align*}
+We can now rewrite $y_2$ given that the total probability is $1$, as $y_2 = 1 - y_1$. We can then relabel $y_1\rightarrow y$. The same can be done for the output.
+\begin{align}
+    \mathcal{C}^2_\mathrm{CE} = - y \ln a - (1 - y) \ln (1 - a). \\
+    \label{eq:binary-cross-entropy}
+\end{align}
+With these cost functions, we can begin at looking at the activation functions.
 
 \section{Activation functions}
+So far, we have not touched on activation functions. We will different between the output activation function, which will in the classification case be forced to be between 0 and 1, and the hidden layer activation functions.
+\subsection{Output layer activation functions}
+\subsubsection{Sigmoidal activation function}
+The \textbf{sigmoid} activation function is given as,
+\begin{align}
+    \sigma_\mathrm{sig} (z) = \frac{1}{1 + \e{-z}}
+    \label{eq:sigmoidal-activation}
+\end{align}
+The sigmoidal activation function can also be used as a hidden layer activation function. The derivative with respect to $z$ of the sigmoidal activation function will be given by,
+\begin{align}
+    \sigma'_\mathrm{sig}(z) = \sigma_\mathrm{sig}(z)(1 - \sigma_\mathrm{sig}(z))
+    \label{eq:sigmoidal-activation-derivative}
+\end{align}
 
-\subsection{Output layer activation}
-\subsection{Layer activation}
+\subsubsection{Softmax activation function}
+The \textbf{softmax} activation function is defined component-wise, and is given as
+\begin{align}
+    \sigma_\mathrm{sm}(z)_i = \frac{\e{z_i}}{\sum^{K}_{k=1}\e{z_k}}
+    \label{eq:softmax-activation}
+\end{align}
+The softmax activation function can only be used in the output layer\footnote{See \href{https://stackoverflow.com/questions/37588632/why-use-softmax-only-in-the-output-layer-and-not-in-hidden-layers}{this page} for why softmax is commonly not used.}. Let us now find the derivative of the softmax function with respect to $z$.
+\begin{align*}
+    \frac{\partial}{\partial z_j} \sigma_\mathrm{sm}(z)_i &= \frac{\partial}{\partial z_j}\left( \frac{\e{z_i}}{\sum^K_{k=1} \e{z_k}} \right)
+\end{align*}
+
+\subsection{Hidden layer activation functions}
+For hidden layer activation functions, we have several options. We have already looked at the 
+
+\subsubsection{Hyperbolic tangens activation function}
+The \textbf{hyperbolic tangens} activation function is given as
+\begin{align}
+    \sigma_\mathrm{tanh}(z) = \tanh(z)
+    \label{eq:act-tanh}
+\end{align}
+with its derivative
+\begin{align}
+    \sigma'_\mathrm{tanh}(z) = 1 - \tanh^2(z)
+    \label{eq:act-tanh-der}
+\end{align}
+
+\subsubsection{Relu activation function}
+The \textbf{relu} or rectifier activation is given as,
+\begin{align}
+    \sigma_\mathrm{relu}(z) = 
+    \begin{cases}
+        z & \text{if } z \geq 0 \\
+        0 & \text{if } z < 0 \\
+    \end{cases}
+    \label{eq:act-relu}
+\end{align}
+with its derivative
+\begin{align}
+    \sigma'_\mathrm{relu}(z) = 
+    \begin{cases}
+        1 & \text{if } z \geq 0 \\
+        0 & \text{if } z < 0 \\
+    \end{cases}
+    \label{eq:act-relu-der}
+\end{align}
+
+\subsubsection{Heaviside activation function}
+The \textbf{Heaviside} activation function is given as
+\begin{align}
+    \sigma_\mathrm{Heaviside}(z) = 
+    \begin{cases}
+        1 & \text{if } z \geq 0 \\
+        0 & \text{if } z < 0 \\
+    \end{cases}
+    \label{eq:act-heaviside}
+\end{align}
+with its derivative
+\begin{align}
+    \sigma'_\mathrm{Heaviside}(z) = 0
+    \label{eq:act-heaviside-der}
+\end{align}
+
 
 \section{Deriving the back propagation}
 
+% Cross-entropy softmax
+% https://math.stackexchange.com/questions/945871/derivative-of-softmax-loss-function
+
 % List combinations of back propagation algorithms
+
+
+\begin{appendices}
+\section{Notation} \label{app:notation}
+For notation, we will use bold italic as vectors, e.g. $\bm{x}$, $\bm{y}$, $\bm{z}$. For matrices, we will use capital letters, $W$, $B$, $X$.
+\end{appendices}
+
 
 \end{document}

@@ -1,2 +1,10 @@
 datafiles*
 __pycache__*
+
+# Latex junk
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.gz

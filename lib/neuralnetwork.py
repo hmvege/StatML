@@ -96,6 +96,9 @@ class MultilayerPerceptron:
                 np.random.randn(l_j, l_i) / np.sqrt(l_i)
                 for l_i, l_j in zip(layer_sizes[:-1], layer_sizes[1:])]
 
+        print (len(self.weights))
+        exit(1)
+
         # Sets up biases
         self.biases = [np.random.randn(l_j, 1) for l_j in layer_sizes[1:]]
 
@@ -300,7 +303,7 @@ class MultilayerPerceptron:
                 self._output_activation_derivative(z_list[-1]).T).T
         else: # cross entropy
             delta = self._cost.delta(self.activations[-1], y,
-                                     None).T
+                                     self._output_activation_derivative(z_list[-1]).T).T
         # delta = self._cost.delta(self.activations[-1], y,
         #                              None).T
 
@@ -454,7 +457,7 @@ class MultilayerPerceptron:
     def cost(self, X, y):
         """Calculates the cost."""
         y_pred = np.asarray([self.predict(ix) for ix in X]).reshape(*y.shape)
-        return self._cost(y_pred, y)
+        return self._cost.cost(y_pred, y)
 
     def evaluate(self, test_data, test_labels, show_image=False):
         """Evaluates test data.
@@ -537,9 +540,9 @@ def __test_mlp_mnist():
     # Activation options: "sigmoid", "identity", "relu", "tanh", "heaviside"
     activation = "sigmoid"
     # Cost function options: "mse", "log_loss", "exponential_cost"
-    cost_function = "mse"
+    cost_function = "log_loss"
     # Output activation options:  "identity", "sigmoid", "softmax"
-    output_activation = "sigmoid"
+    output_activation = "softmax"
     # Weight initialization options:
     # default(sigma=1/sqrt(N_samples)), large(sigma=1.0)
     weight_init = "default"
