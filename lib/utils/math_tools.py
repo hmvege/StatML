@@ -179,7 +179,7 @@ class MSECost(_BaseCost):
 
     @staticmethod
     def delta(a, y, a_prime):
-        return (a - y)# * a_prime
+        return (a - y) * a_prime
 
 
 class LogEntropyCost(_BaseCost):
