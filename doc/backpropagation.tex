@@ -9,8 +9,20 @@
 \usepackage[toc,page]{appendix}
 \usepackage{hyperref}
 
-\newcommand{\e}[1]{\mathrm{e}^{#1}}
+% For customized hlines in tables
+\usepackage{ctable}
 
+% \usepackage{graphicx}
+% \usepackage{caption}
+% \usepackage{tabularx}
+
+% Algorithm packages
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+
+\newcommand{\e}[1]{\mathrm{e}^{#1}}
+\newcommand{\pd}[2]{\frac{\partial {#1}}{\partial {#2}}}
 
 \pagestyle{fancy}
 
@@ -58,7 +70,16 @@ Inserting the previous layer outputs, the full forward pass will be,
     \bm{a}^L = \sigma(W^L\sigma(W^{L-1}\sigma(\cdots \sigma(W^{1}\bm{x} + \bm{b}^1) \cdots) + \bm{b}^{L-1}) + \bm{b}^L)
     \label{eq:full-forward-pass}
 \end{align}
-With these basics in place, we can now start to consider how one measures how good the network is at prediction.
+
+In order to make the network \textit{learn}, we will have to update these weights and biases somehow. The way that is done is by first having a measure of how good the network is performing. This is done using a \textit{cost function}, $\mathcal{C}$. We will end up taking the gradient of this function with respect to either the bias $\bm{b}^l$ or $W^l$,
+\begin{align*}
+    \nabla_{j,W}^l \mathcal{C} = \frac{\partial \mathcal{C}}{\partial W^l_j}
+\end{align*}
+and
+\begin{align*}
+    \nabla^l_{j,\bm{b}} \mathcal{C} = \frac{\partial \mathcal{C}}{\partial b^l_j}
+\end{align*}
+Note that we are taking the derivative component-wise. Let us start by investigating two cost functions which is widely used.
 
 \section{Cost functions}
 The cost function is a function which measures how good our network predicts an outcome based on some labeled outcome. We which wish to minimize, and in doing so will use stochastic gradient descent and update our weights based on the gradient descent. We will be looking at two main cost functions, the \textit{quadratic cost}(or MSE cost function), or the \textit{cross entropy}.
@@ -116,7 +137,15 @@ The \textbf{sigmoid} activation function is given as,
     \sigma_\mathrm{sig} (z) = \frac{1}{1 + \e{-z}}
     \label{eq:sigmoidal-activation}
 \end{align}
-The sigmoidal activation function can also be used as a hidden layer activation function. The derivative with respect to $z$ of the sigmoidal activation function will be given by,
+The sigmoidal activation function can also be used as a hidden layer activation function. The derivative with respect to $z$ of the sigmoidal activation function is easy,
+\begin{align*}
+    \frac{\partial}{\partial z}(\sigma_\mathrm{sig}(z)) &= \frac{\partial}{\partial z}\left(\frac{1}{1 + \e{-z}}\right) \\
+    &= (-\e{-z}) \frac{-1}{(1+\e{-z})^2} \\
+    &= \sigma_\mathrm{sig}(z)\left(\frac{1 - 1 + \e{-z}}{1 + \e{-z}}\right) \\
+    &= \sigma_\mathrm{sig}(z)\left(1 - \frac{1}{1 + \e{-z}}\right) \\
+    &= \sigma_\mathrm{sig}(z)\left(1 - \sigma_\mathrm{sig}(z)\right) \\
+\end{align*}
+And this, summed up we have
 \begin{align}
     \sigma'_\mathrm{sig}(z) = \sigma_\mathrm{sig}(z)(1 - \sigma_\mathrm{sig}(z))
     \label{eq:sigmoidal-activation-derivative}
@@ -130,11 +159,36 @@ The \textbf{softmax} activation function is defined component-wise, and is given
 \end{align}
 The softmax activation function can only be used in the output layer\footnote{See \href{https://stackoverflow.com/questions/37588632/why-use-softmax-only-in-the-output-layer-and-not-in-hidden-layers}{this page} for why softmax is commonly not used.}. Let us now find the derivative of the softmax function with respect to $z$.
 \begin{align*}
-    \frac{\partial}{\partial z_j} \sigma_\mathrm{sm}(z)_i &= \frac{\partial}{\partial z_j}\left( \frac{\e{z_i}}{\sum^K_{k=1} \e{z_k}} \right)
+    \frac{\partial}{\partial z_j} \left( \sigma_\mathrm{sm}(z)_i \right) &= \frac{\partial}{\partial z_j}\left( \frac{\e{z_i}}{\sum^K_{k=1} \e{z_k}} \right) \\
+    &= \begin{cases}
+        \frac{\partial}{\partial z_j} \left(\frac{\e{z_i}}{\sum^K_{k=1} \e{z_k}} \right)
+         & \text{if } j \neq i \\
+        \frac{\partial}{\partial z_j} \left( \frac{\e{z_i}}{\sum^K_{k=1} \e{z_k}} \right)
+         & \text{if } j = i \\
+    \end{cases} \\
+    &= \begin{cases}
+        \frac{- \e{z_j}\e{z_i}}{\left( \sum^K_{k=1} \e{z_k} \right)^2}
+         & \text{if } j \neq i \\
+        \frac{\e{z_j}}{\sum^K_{k=1} \e{z_k}} - \frac{\e{z_j}\e{z_i}}{\left( \sum^K_{k=1} \e{z_k} \right)^2}
+         & \text{if } j = i \\
+    \end{cases} \\
+    &= \begin{cases}
+        - \sigma_\mathrm{sm}(z)_j \sigma_\mathrm{sm}(z)_i
+         & \text{if } j \neq i \\
+        \sigma_\mathrm{sm}(z)_j - \sigma_\mathrm{sm}(z)_j \sigma_\mathrm{sm}(z)_i
+         & \text{if } j = i \\
+    \end{cases} \\
+    &= \sigma_\mathrm{sm}(z)_j \left( \delta_{ji} - \sigma_\mathrm{sm}(z)_i \right)
 \end{align*}
+Which is, summing
+\begin{align}
+    \frac{\partial}{\partial z_j} \left(\sigma_\mathrm{sm}(z)_i\right) &= \sigma_\mathrm{sm}(z)_j \left( \delta_{ji} - \sigma_\mathrm{sm}(z)_i \right)
+    \label{eq:softmax-derivative}
+\end{align}
+
 
 \subsection{Hidden layer activation functions}
-For hidden layer activation functions, we have several options. We have already looked at the 
+For hidden layer activation functions, we have several options. We have already looked at the sigmoidal function as an output layer activation function, and it can be used as a hidden layer activation function as well.
 
 \subsubsection{Hyperbolic tangens activation function}
 The \textbf{hyperbolic tangens} activation function is given as
@@ -185,13 +239,231 @@ with its derivative
 \end{align}
 
 
+\section{Training a network}
+As mentioned, we will train the network using \textit{Stochastic Gradient Descent}(SGD) and \textit{mini-batches}. The idea is to shuffle the data set, and randomly select a subset of elements in the dataset. We will then perform a forward-pass of the network, and using the output $\bm{a}^L$, perform back propagation, and update each weight and bias in the network. The main algorithm for training a network can be seen below,
+\begin{algorithm}[H]
+    \caption{Training a MLP}
+    \label{alg:mlp-training}
+    \begin{algorithmic}[1]
+        \State Initialize learning rate $\eta$.
+        \State Initialize with input data $\{\bm{x}_i\}$ and labels $\{\bm{y}_i\}$ of size $N$.
+        \For{$i_\mathrm{epoch}=1:N_\mathrm{epochs}$}
+            \State Shuffle data.
+            \State Split data into $K_\mathrm{mb}$ mini batches, $\{\bm{x}_{i_\mathrm{mb}}\}$ and $\{\bm{y}_{i_\mathrm{mb}}\}$.
+            \For{$i_\mathrm{mb}=1:N/K_\mathrm{mb}$}
+                \State Perform a forward pass.
+                \State Perform a back propagation, retrieving $\nabla W^l_{i_\mathrm{mb}}$ and $\nabla b^l_{i_\mathrm{mb}}$ for each $i_\mathrm{mb}$.
+            \EndFor
+            \State Average the $\nabla W^l_{i_\mathrm{mb}}$ and $\nabla b^l_{i_\mathrm{mb}}$, and update weights $W^l$ and biases $b^l$ with these averages.
+            \State Update learning rate $\eta$ if needed.
+        \EndFor
+    \end{algorithmic}
+\end{algorithm}
+
+
+\subsection{Learning rate}
+When updating the weights and biases with SGD, we did so by a learning rate parameter $\eta$. There are several way to define $\eta$, with the simplest one having $\eta=\mathrm{constant}$. Another option is one that is inversely decreasing as a function of the epochs. That is, for a given epoch $i_\mathrm{epoch}$ out a total $N_\mathrm{epochs}$, we set the learning rate as
+\begin{align}
+    \eta(i_\mathrm{epoch}) = \eta_0 \left(1 - \frac{i_\mathrm{epoch}}{1 + N_\mathrm{epochs}}\right)
+    \label{eq:inverse-eta}
+\end{align}
+This will force the step size to decrease toward 0 as we close in on the maximum number of epochs $N_\mathrm{epochs}$.
+
+\subsection{Weight initialization} \label{sec:nn-weights}
+When initializing weights and biases, we will look at two ways of how this can be done. The first is through a Gaussian distribution, $\mathcal(0, 1)$ which we will call \textit{large}, as the biases will have large, spread-out distribution.
+
+Then, we will use a Gaussian distribution but divided by the number of training samples, $\mathcal(0, 1/{N_\mathrm{train}})$, dubbing that one to be called \textit{default}, as this is the one we will by default use in our neural network.
+
+The effect of these two is essentially shrinking in the initial search space, and we should expect them to converge at large epoch times.
+
+\subsection{Measuring the performance}
+The performance of a neural network(or any classifier), can in its simplest form be measured by the accuracy, which is defined as
+\begin{align}
+    \mathrm{Accuracy} = \frac{\sum^{n}_{i=1}I(t_i = y_i)}{n},
+    \label{eq:mlp-accuracy}
+\end{align}
+where $n$ is the number of samples we are testing against, $I$ is the indicator function, which returns 1 if the prediction $t_i$ equals the true values $y_i$.
+
 \section{Deriving the back propagation}
+We have now collected a bunch of tools, and are now ready to apply them to the back-propagation. We begin by imagining us to update the weights based on the gradient of the cost function. We begin with updating the output weights, $W^L$. Labeling the vectors and matrices, we get
+\begin{align}
+    \frac{\partial \mathcal{C}}{\partial W^L_{jk}} &= \pd{\mathcal{C}}{a^L_j}\pd{a^L_j}{z^L_j}\pd{z^L_j}{W^L_{jk}}
+    \label{eq:backprop-vector-matrix-general-component-wise}
+\end{align}
+We see that two of the products are component-wise, such that we actually are multiplying by the Hadamard product.
+\begin{align}
+    \frac{\partial \mathcal{C}}{\partial W^L} &= \left(\pd{\mathcal{C}}{\bm{a}^L}\odot\pd{\bm{a}^L}{\bm{z}^L}\right) \pd{\bm{z}^L}{W^L}
+    \label{eq:backprop-vector-matrix-general}
+\end{align}
+We see that we need three derivatives, one for the cost function, one for the output activation layer and one for the $z^L$. 
 
-% Cross-entropy softmax
-% https://math.stackexchange.com/questions/945871/derivative-of-softmax-loss-function
+To sum up, we have to find three derivatives, the first being the of the cost function
+\begin{align*}
+    \pd{\mathcal{C}}{\bm{a}^L}.
+\end{align*}
+We then need to find the output activation function derivative.
+\begin{align}
+    \pd{\bm{a}^L}{\bm{z}^L} = \pd{}{\bm{z}^L} \left(\sigma(\bm{z}^L)\right)
+    \label{eq:output-activation-function-derivative}
+\end{align}
+The final derivative, is given as
+\begin{align}
+    \pd{\bm{z}^L}{W^L} = \bm{a}^{L-1}
+    \label{eq:z-derivative}
+\end{align}
+Let us no find the exact derivatives of the cost functions.
 
-% List combinations of back propagation algorithms
+\subsection{Quadratic cost derivative}
+We start with finding the derivative of the quadratic cost,
+\begin{align*}
+    \pd{\mathcal{C}_\mathrm{MSE}}{\bm{a}^L} &= \pd{}{\bm{a}^L}\left( \frac{1}{2}(\bm{a}^L - \bm{y})^2 \right) \\
+    &= \bm{a}^L - \bm{y},
+\end{align*}
+which is summed up as,
+\begin{align}
+    \pd{\mathcal{C}_\mathrm{MSE}}{\bm{a}^L} = \bm{a}^L - \bm{y}.
+    \label{eq:mse-derivative}
+\end{align}
 
+\subsection{Cross entropy derivative}
+The derivative of the cross entropy is given as,
+\begin{align*}
+    \pd{\mathcal{C}_\mathrm{CE}}{\bm{a}^L} &= \pd{}{\bm{a}^L}\left( - \bm{y} \ln \bm{a}^L \right) \\
+    &= - \frac{\bm{y}}{\bm{a}^L}.
+\end{align*}
+Which, summed up is,
+\begin{align}
+    \pd{\mathcal{C}_\mathrm{CE}}{\bm{a}^L} = - \frac{\bm{y}}{\bm{a}^L}.
+    \label{eq:cross-entropy-derivative}
+\end{align}
+
+If we have a binary classification($K=2$ classes), we can rewrite the expression as,
+\begin{align*}
+    \pd{\mathcal{C}^2_\mathrm{CE}}{a^L} &= - \pd{}{a^L} \left( y \ln a^L - (1 - y) \ln (1 - a^L) \right) \\
+    &= \frac{1-y}{1-a^L} - \frac{y}{a^L} \\
+    &= \frac{a^L - y}{a^L(1 - a^L)}
+\end{align*}
+
+\subsection{Calculating the full back propagation}
+We have four different output(in reality only three\footnote{For multiclass cross entropy output, sigmoidal activation as final layer is simply as special case of the softmax function. Thus, we will only use softmax activation for final layer output for the cross entropy.}), which can be seen in \ref{tab:output-cost-function-activations}.
+\begin{table}[H]
+    \centering
+    \caption{Different cost function activations. MSE is the same as quadratic cost.}
+    \begin{tabular}{l l} % 6 columns
+        \specialrule{.1em}{.05em}{.05em}
+        Cost function & Output activation \\ \hline
+        MSE & Sigmoid \\
+        MSE & Softmax \\
+        CE & Softmax \\
+        \specialrule{.1em}{.05em}{.05em}
+    \end{tabular}
+    \label{tab:output-cost-function-activations}
+\end{table}
+For the derivations, we will mostly ignore that we are dealing with vectors and matrices, and instead bring it back in at the very end.
+
+\subsubsection{MSE and sigmoidal output activation}
+Let us then begin with looking at MSE and sigmoidal output activation. The change in the output layer $L$ is given as,
+\begin{align*}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^L} &= \left( \pd{\mathcal{C}_\mathrm{MSE}}{\bm{a}^L_\mathrm{sig}} \odot \pd{\bm{a}^L_\mathrm{sig}}{\bm{z}^L}\right) \pd{\bm{z}^L}{W^L} \\
+    &= \big( \underbrace{(\bm{a}^L - \bm{y})}_{\mathrm{MSE}} \odot \underbrace{\bm{a}^L(1-\bm{a}^L)}_{\mathrm{Sigmoid}} \big) \bm{a}^{L-1}.
+\end{align*}
+For the change in bias $b^L$, we get 
+\begin{align*}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial \bm{b}^L} &= \left( \pd{\mathcal{C}_\mathrm{MSE}}{\bm{a}^L_\mathrm{sig}} \odot \pd{\bm{a}^L_\mathrm{sig}}{\bm{z}^L} \right) \pd{\bm{z}^L}{\bm{b}^L} \\
+    &= \big( \underbrace{(\bm{a}^L - \bm{y})}_{\mathrm{MSE}} \odot \underbrace{\bm{a}^L(1-\bm{a}^L)}_{\mathrm{Sigmoid}} \big) \times 1.
+\end{align*}
+We observe that the only change in output between the derivatives is $\bm{a}^{L-1}$. 
+
+If we now wish to find the change in the $L-1$ layer with respect to $W^{L-1}$, we get
+\begin{align*}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^{L-1}} &= \pd{\mathcal{C}_\mathrm{MSE}}{\bm{a}^L_\mathrm{sig}}\pd{\bm{a}^L_\mathrm{sig}}{\bm{z}^L}\pd{\bm{z}^L}{W^{L-1}} \\
+    &= \pd{\mathcal{C}_\mathrm{MSE}}{\bm{a}^L_\mathrm{sig}}\pd{\bm{a}^L_\mathrm{sig}}{\bm{z}^L}\pd{\bm{z}^L}{\bm{a}^{L-1}}\pd{\bm{a}^{L-1}}{\bm{z}^{L-1}}\pd{\bm{z}^{L-1}}{W^{L-1}} \\
+    &= (\bm{a}^L - \bm{y}) \bm{a}^L(1-\bm{a}^L) W^L \sigma'_{\mathrm{sig}}(\bm{z}^{L-1})\bm{a}^{L-2}
+\end{align*}
+Here, we recognize the first second as what we had for the first layer, so we can call that,
+\begin{align}
+    \delta^L = (\bm{a}^L - \bm{y}) \bm{a}^L(1-\bm{a}^L)
+    \label{eq:delta-change}
+\end{align}
+Using this, for the $L-1$ layer we get
+\begin{align*}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^L} &= \delta^L \bm{a}^{L-1} \\
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial \bm{b}^L} &= \delta^L 
+\end{align*}
+and for the $L-2$ layer, we get
+\begin{align*}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^{L-1}} &= \delta^L W^L \sigma'_{\mathrm{sig}}(\bm{z}^{L-1})\bm{a}^{L-2} \\
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial \bm{b}^{L-1}} &= \delta^L W^L \sigma'_{\mathrm{sig}}(\bm{z}^{L-1}).
+\end{align*}
+Looking at the derivative for layer $L-2$ with respect to $W^{L-2}$ we get,
+\begin{align*}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^{L-2}} &= \pd{\mathcal{C}_\mathrm{MSE}}{\bm{a}^L_\mathrm{sig}} \pd{\bm{a}^L_\mathrm{sig}}{\bm{z}^L} \pd{\bm{z}^L}{\bm{a}^{L-1}} \pd{\bm{a}^{L-1}}{\bm{z}^{L-1}} \pd{\bm{z}^{L-1}}{\bm{a}^{L-2}} \pd{\bm{a}^{L-2}}{\bm{z}^{L-2}} \pd{\bm{z}^{L-2}}{W^{L-2}} \\
+    &= \delta^L W^L \sigma'_{\mathrm{sig}}(\bm{z}^{L-1}) W^{L-1} \sigma'_{\mathrm{sig}}(\bm{z}^{L-2}) \bm{a}^{L-3}
+\end{align*}
+Updating $\delta^L$ for the subsequent layers gives us
+\begin{align*}
+    \delta^{L-1} &= \delta^L W^L \sigma'_{\mathrm{sig}}(\bm{z}^{L-1}) \\
+    \delta^{L-2} &= \delta^{L-1} W^{L-1} \sigma'_{\mathrm{sig}}(\bm{z}^{L-2}).
+\end{align*}
+Using these expressions, we can organize our previous expressions to
+\begin{align*}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^{L-1}} &= \delta^{L-1} \bm{a}^{L-2} \\
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^{L-2}} &= \delta^{L-2} \bm{a}^{L-3}.
+\end{align*}
+We see a pattern, and can summarize our equations. Note that so far, we have mostly assumed that much of the matrix and vector multiplications are component wise, but will now include the full expression. Without specifying the sigmoidal function as the layer activation and writing the derivative of the cost function with respect to $\mathbf{a}$ as $\nabla_{\bm{a}^L}\mathcal{C}$, we get
+\begin{align}
+    \delta^L = \nabla_{\bm{a}}^L \mathcal{C} \odot \sigma'(\bm{a}^L)
+    \label{eq:delta-change-general}
+\end{align}
+\begin{align}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^L} &= \delta^L (\bm{a}^{L-1})^T
+    \label{eq:weight-update-last}
+\end{align}
+\begin{align}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^l} &= \delta^L
+    \label{eq:bias-update-last}
+\end{align}
+For the subsequent layers, we get
+\begin{align}
+    \delta^{l-1} &= \left(\left(W^{l}\right)^T \delta^{l}\right) \odot \sigma'(\bm{z}^{l-1})
+    \label{eq:delta-layer-update}
+\end{align}
+\begin{align}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^l} &= \delta^l \bm{a}^{l-1}
+    \label{eq:weight-update}
+\end{align}
+\begin{align}
+    \frac{\partial \mathcal{C}_\mathrm{MSE}}{\partial W^l} &= \delta^l
+    \label{eq:bias-update}
+\end{align}
+
+\subsubsection{MSE and softmax output activation}
+For MSE and softmax as the output activation, we need only change the MSE the first two derivatives in equation \eqref{eq:backprop-vector-matrix-general-component-wise}. We use what we found in equation 
+\begin{align*}
+    \pd{\mathcal{C}}{a^L_j} \pd{a^L_j}{z^L_j} &= (a_j^L - y_j) \sigma_{\mathrm{sm}}(z)_j \left( \delta_{ji} - \sigma_{\mathrm{sm}}(z)_i \right)
+\end{align*}
+To simplify, this becomes
+\begin{align}
+    \delta_j^L = (a_j^L - y_j) \sigma_\mathrm{sm}(z)_j \left( \delta_{ji} - \sigma_\mathrm{sm}(z)_i \right)
+    \label{eq:mse-softmax-derivative}
+\end{align}
+
+\subsubsection{Cross entropy and softmax}
+We start by taking the derivative with respect to component $j$\footnote{An alternative derivation of the cross entropy with softmax as output layer can be found \href{https://math.stackexchange.com/questions/945871/derivative-of-softmax-loss-function}{here}},
+\begin{align*}
+    \pd{\mathcal{C}_\mathrm{CE}}{a^L_{j,\mathrm{SM}}} \pd{a^L_{j,\mathrm{SM}}}{z^L_j} &= \sum_k \left( -\frac{y_k}{a^L_k} \right)a_i^L \left( \delta_{ik} - a_k^L \right)
+\end{align*}
+Splitting the delta function into the case of $i\neq k$ and $i=k$,
+\begin{align*}
+    \sum_k \left( -\frac{y_k}{a^L_k} \right)a_i^L \left( \delta_{ik} - a_k^L \right) &= -\frac{y_i}{a_i^L}a^L_i \left( 1 - a_i^L \right) - \sum_{k\neq i} \frac{y_k}{a^L_k} \left( -a_i^L a_k^L \right) \\
+    &= -y_i + y_i a^L_i - \sum_{k\neq i} y_k (-a_i^L) = -y_i + \left(\sum_k y_k \right) a^L_i \\
+    &= a_i^L - y_i
+\end{align*}
+Summing up, we have
+\begin{align}
+    \pd{\mathcal{C}_\mathrm{CE}}{a^L_{j,\mathrm{SM}}} \pd{a^L_{j,\mathrm{SM}}}{z^L_j} = a_i^L - y_i
+    \label{eq:cross-entropy-softmax-derivative}
+\end{align}
 
 \begin{appendices}
 \section{Notation} \label{app:notation}
