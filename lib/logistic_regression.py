@@ -18,8 +18,6 @@ except ModuleNotFoundError:
 # TODO: validate SGD without minibatches
 # TODO: validate SGD with minibatches
 # TODO: implement momentum(see lecture notes on cd with momentum)
-# TODO: parallized logreg
-# TODO: jit what can be jitted
 # TODO: make optimizers take penalty argument?
 
 
@@ -102,7 +100,7 @@ class LogisticRegression:
         as solver method do not have momentum capabilities."""
         if self.momentum != 0:
             raise ValueError("Momentum not available for "
-                "method {}".format(solver_method))
+                             "method {}".format(solver_method))
 
     def _set_regularization_method(self, penalty):
         """Set the penalty/regularization method to use."""
@@ -134,9 +132,9 @@ class LogisticRegression:
         self.activation = activation
 
         if activation == "sigmoid":
-            self._activation = umath.sigmoid
+            self._activation = umath.Sigmoid
         elif activation == "softmax":
-            self._activation = umath.softmax
+            self._activation = umath.Softmax
         else:
             raise KeyError("Final layer activation type '{}' not "
                            "recognized. Available activations:".format(
@@ -185,6 +183,14 @@ class LogisticRegression:
 
         self._fit_performed = True
 
+    @staticmethod
+    @nb.njit(cache=True)
+    def _cost_function_core(X, y, weights, alpha):
+        p_ = np.dot(X, weights)
+        loss = - np.sum(y*p_ - np.log(1 + np.exp(p_)))
+        loss += (0.5*alpha*np.dot(weights, weights))
+        return loss
+
     def _cost_function(self, X, y, weights, eps=1e-15):
         """Cost/loss function for logistic regression. Also known as the 
         cross entropy in statistics.
@@ -197,35 +203,20 @@ class LogisticRegression:
             (ndarray): 1D array of predictions
         """
 
-        p_ = np.dot(X, weights)
-        loss = - np.sum(y*p_ - np.log(1 + np.exp(p_)))
-        loss += (0.5*self.alpha*np.dot(weights, weights))
-        return loss
-
-        # y_pred = self._predict_linear(X, weights)
-
-        # p_probabilities = self._activation(y_pred)
-
-        # # Removes bad values and replaces them with limiting values eps
-        # p_probabilities = np.clip(p_probabilities, eps, 1-eps)
-
-        # cost1 = - y * np.log(p_probabilities)
-        # cost2 = (1 - y) * np.log(1 - p_probabilities)
-        # cost = np.sum(cost1 - cost2) + self._get_penalty(weights)*self.alpha
-
-        # return cost
+        # p_ = np.dot(X, weights)
+        # loss = - np.sum(y*p_ - np.log(1 + np.exp(p_)))
+        # loss += (0.5*self.alpha*np.dot(weights, weights))
+        # return loss
+        return self._cost_function_core(X, y, weights, self.alpha)
 
     def _cost_function_gradient(self, X, y, weights):
         """Takes the gradient of the cost function w.r.t. the coefficients.
 
             dC(W)/dw = - X^T * (y - p(X^T * w))
         """
-
-        # p_ = umath.sigmoid(X @ weights)
-        # loss = - X.T @ (y - p_) + self.alpha * weights
-        # return loss
-
-        grad = np.dot(X.T, (self._activation(self._predict_linear(X, weights)) - y))
+        grad = np.dot(
+            X.T,
+            (self._activation.activate(self._predict_linear(X, weights)) - y))
 
         # Adds regularization
         grad += self.alpha*weights
@@ -240,7 +231,8 @@ class LogisticRegression:
             W = p(1 - X^T * w) * p(X^T * w)
         """
         y_pred = self._predict_linear(X, w)
-        return X.T @ self._activation(1-y_pred) @ self._activation(y_pred) @ X
+        return X.T @ self._activation.activate(1-y_pred) @ \
+            self._activation.activate(y_pred) @ X
 
     @staticmethod
     @nb.njit(cache=True)
@@ -295,7 +287,8 @@ class LogisticRegression:
 
         # Retrieves probabilitites
         probabilities = \
-            self._activation(self._predict_linear(X, self.coef)).ravel()
+            self._activation.activate(
+                self._predict_linear(X, self.coef)).ravel()
 
         # Sets up binary probability
         results_proba = np.asarray([1 - probabilities, probabilities])
@@ -315,7 +308,8 @@ class LogisticRegression:
 
         X = np.hstack([np.ones((X.shape[0], 1)), X])
         probabilities = \
-            self._activation(self._predict_linear(X, self.coef)).ravel()
+            self._activation.activate(
+                self._predict_linear(X, self.coef)).ravel()
         results = np.asarray([1 - probabilities, probabilities])
 
         return np.moveaxis(results, 0, 1)
@@ -332,7 +326,7 @@ def __test_logistic_regression():
     y = (iris["target"] == 2).astype(np.int)  # 1 if Iris-Virginica, else 0
 
     # Local implementation parameters
-    test_size = 0.1
+    test_size = 0.5
     penalty = "elastic_net"
     learning_rate = 0.001
     max_iter = 1000000
@@ -352,7 +346,7 @@ def __test_logistic_regression():
     X_new = np.linspace(0, 3, 100).reshape(-1, 1)
 
     # Manual logistic regression
-    print ("Manual solver method:", solver)
+    print("Manual solver method:", solver)
     log_reg = LogisticRegression(penalty=penalty, solver=solver,
                                  activation=activation, tol=tol,
                                  alpha=alpha, momentum=momentum,
@@ -367,7 +361,7 @@ def __test_logistic_regression():
     # SK-Learn logistic regression
     if penalty == "elastic_net":
         sk_penalty = "l2"
-    else: 
+    else:
         sk_penalty = penalty
     sk_log_reg = sk_model.LogisticRegression(fit_intercept=True,
                                              C=1.0/alpha, penalty=sk_penalty,

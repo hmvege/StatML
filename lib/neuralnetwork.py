@@ -13,8 +13,6 @@ except ModuleNotFoundError:
         AVAILABLE_REGULARIZATIONS
 
 
-
-# TODO: derive proper cost functions back-propagation by hand
 # TODO: implement the use of all cost functions for any output activation.
 # TODO: vectorize mini batch procedure.
 # TODO: parallize the mini batch procedure.
@@ -96,9 +94,6 @@ class MultilayerPerceptron:
                 np.random.randn(l_j, l_i) / np.sqrt(l_i)
                 for l_i, l_j in zip(layer_sizes[:-1], layer_sizes[1:])]
 
-        print (len(self.weights))
-        exit(1)
-
         # Sets up biases
         self.biases = [np.random.randn(l_j, 1) for l_j in layer_sizes[1:]]
 
@@ -114,20 +109,15 @@ class MultilayerPerceptron:
         self.activation = activation
 
         if activation == "sigmoid":
-            self._activation = umath.sigmoid
-            self._activation_derivative = umath.sigmoid_derivative
+            self._activation = umath.Sigmoid
         elif activation == "identity":
-            self._activation = umath.identity
-            self._activation_derivative = umath.identity_derivative
+            self._activation = umath.Identity
         elif activation == "relu":
-            self._activation = umath.relu
-            self._activation_derivative = umath.relu_derivative
+            self._activation = umath.Relu
         elif activation == "tanh":
-            self._activation = umath.tanh_
-            self._activation_derivative = umath.tanh_derivative
+            self._activation = umath.Tanh
         elif activation == "heaviside":
-            self._activation = umath.heaviside
-            self._activation_derivative = umath.heaviside_derivative
+            self._activation = umath.Heaviside
         else:
             raise KeyError("Activation type '{}' not recognized. Available "
                            "activations:".format(
@@ -144,14 +134,11 @@ class MultilayerPerceptron:
         self.output_activation = output_activation
 
         if output_activation == "sigmoid":
-            self._output_activation = umath.sigmoid
-            self._output_activation_derivative = umath.sigmoid_derivative
+            self._output_activation = umath.Sigmoid
         elif output_activation == "identity":
-            self._output_activation = umath.identity
-            self._output_activation_derivative = umath.identity_derivative
+            self._output_activation = umath.Identity
         elif output_activation == "softmax":
-            self._output_activation = umath.softmax
-            self._output_activation_derivative = umath.softmax_derivative
+            self._output_activation = umath.Softmax
         else:
             raise KeyError("Final layer activation type '{}' not "
                            "recognized. Available activations:".format(
@@ -186,6 +173,12 @@ class MultilayerPerceptron:
         if cost_function == "mse":
             self._cost = umath.MSECost()
         elif cost_function == "log_loss":
+            assert self.output_activation == "softmax", (
+                "Only softmax output activation can be used with "
+                "log_loss(Cross Entropy) cost function. "
+                "Provided output activation: {}".format(
+                    self.output_activation))
+            self._output_activation = umath.SoftmaxCrossEntropy()
             self._cost = umath.LogEntropyCost()
         elif cost_function == "exponential_cost":
             self._cost = umath.ExponentialCost()
@@ -259,9 +252,9 @@ class MultilayerPerceptron:
             z += self.biases[i]
 
             if i+1 != (self.N_layers - 1):
-                activations.append(self._activation(z))
+                activations.append(self._activation.activate(z))
 
-        activations.append(self._output_activation(z))
+        activations.append(self._output_activation.activate(z))
 
         return activations
 
@@ -287,23 +280,28 @@ class MultilayerPerceptron:
 
             if (i+1) != (self.N_layers - 1):
                 # Middle layer(s) activation
-                self.activations.append(self._activation(z))
+                self.activations.append(self._activation.activate(z))
             else:
                 # Sigmoid output layer
-                self.activations.append(self._output_activation(z).T)
+                self.activations.append(self._output_activation.activate(z).T)
 
         # Backpropegation begins, initializes the backpropagation derivatives
         delta_w = [np.empty(w.shape) for w in self.weights]
         delta_b = [np.empty(b.shape) for b in self.biases]
 
         # Gets initial delta value, first of the four equations
-        if self.cost_function == "mse":
-            delta = self._cost.delta(
-                self.activations[-1], y, 
-                self._output_activation_derivative(z_list[-1]).T).T
-        else: # cross entropy
-            delta = self._cost.delta(self.activations[-1], y,
-                                     self._output_activation_derivative(z_list[-1]).T).T
+        delta = self._cost.delta(
+                self.activations[-1], y,
+                self._output_activation.derivative(z_list[-1]).T).T
+
+        # if self.cost_function == "mse":
+        #     delta = self._cost.delta(
+        #         self.activations[-1], y,
+        #         self._output_activation.derivative(z_list[-1]).T).T
+        # else:  # cross entropy
+        #     delta = self._cost.delta(
+        #         self.activations[-1], y,
+        #         None).T
         # delta = self._cost.delta(self.activations[-1], y,
         #                              None).T
 
@@ -318,7 +316,7 @@ class MultilayerPerceptron:
         for l in range(2, self.N_layers):
             # Retrieves the z and gets it's derivative
             z = z_list[-l]
-            sp = self._activation_derivative(z)
+            sp = self._activation.derivative(z)
 
             # Sets up delta^l
             delta = self.weights[-l+1].T @ delta
@@ -538,7 +536,7 @@ def __test_mlp_mnist():
     # Parameters
     ################################################
     # Activation options: "sigmoid", "identity", "relu", "tanh", "heaviside"
-    activation = "sigmoid"
+    activation = "tanh"
     # Cost function options: "mse", "log_loss", "exponential_cost"
     cost_function = "log_loss"
     # Output activation options:  "identity", "sigmoid", "softmax"

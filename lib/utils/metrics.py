@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import numpy as np
-
+import numba as nb
 
 __all__ = ["mse", "r2", "bias", "timing_function"]
 
@@ -28,7 +28,6 @@ def mse(y_exact, y_predict, axis=None):
         ".shape = {}".format(y_exact.shape, y_predict.shape))
 
     return np.mean((y_exact - y_predict)**2, axis=axis)
-
 
 def r2(y_exact, y_predict, axis=None):
     """R^2 score
@@ -65,13 +64,13 @@ def bias(y_exact, y_predict, axis=0):
     return np.mean((y_predict - np.mean(y_exact, keepdims=True, axis=axis))**2)
 
 
-def ridge_regression_variance(X, sigma2, lmb):
-    """Analytical variance for beta coefs in Ridge regression,
-    from section 1.4.2, page 10, https://arxiv.org/pdf/1509.09169.pdf"""
-    XT_X = X.T @ X
-    W_lmb = XT_X + lmb * np.eye(XT_X.shape[0])
-    W_lmb_inv = np.linalg.inv(W_lmb)
-    return np.diag(sigma2 * W_lmb_inv @ XT_X @ W_lmb_inv.T)
+# def ridge_regression_variance(X, sigma2, lmb):
+#     """Analytical variance for beta coefs in Ridge regression,
+#     from section 1.4.2, page 10, https://arxiv.org/pdf/1509.09169.pdf"""
+#     XT_X = X.T @ X
+#     W_lmb = XT_X + lmb * np.eye(XT_X.shape[0])
+#     W_lmb_inv = np.linalg.inv(W_lmb)
+#     return np.diag(sigma2 * W_lmb_inv @ XT_X @ W_lmb_inv.T)
 
 
 def timing_function(func):

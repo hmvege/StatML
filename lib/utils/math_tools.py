@@ -18,126 +18,181 @@ AVAILABLE_COST_FUNCTIONS = ["mse", "log_loss", "exponential_cost",
 
 AVAILABLE_REGULARIZATIONS = ["l1", "l2", "elastic_net"]
 
-# TODO: jit what can be jitted
-
 # =============================================================================
 # ACTIVATION FUNCTIONS
 # =============================================================================
 
+class _ActivationCore:
+    @staticmethod
+    @abc.abstractmethod
+    def activate(x):
+        pass
 
-def sigmoid(x):
-    """Sigmoidal activation function.
-
-    Args:
-        x (ndarray): weighted sum of inputs
-    """
-    return expit(x)
-    # return 1.0/(1.0 + np.exp(-x))
-
-
-def sigmoid_derivative(z):
-    s = sigmoid(z)
-    # print(s)
-    return s*(1-s)
+    @staticmethod
+    @abc.abstractmethod
+    def derivative(x):
+        pass
 
 
-def identity(x):
-    """Identity activation function. Input equals output.
+class Sigmoid(_ActivationCore):
+    @staticmethod
+    @nb.njit(cache=True)
+    def activate(x):
+        """Sigmoidal activation function.
 
-    Args:
-        x (ndarray): weighted sum of inputs.
-    """
-    return x
+        Args:
+            x (ndarray): weighted sum of inputs
+        """
+        # return expit(x)
+        return 1.0/(1.0 + np.exp(-x))
 
+    @staticmethod
+    @nb.njit(cache=True)
+    def derivative(x):
+        # s = Sigmoid.activate(x)
+        s = 1.0/(1.0 + np.exp(-x))
+        return s*(1-s)
+    
 
-def identity_derivative(x):
-    """Simply returns the derivative, 1, of the identity."""
-    return 1.0
+class Identity(_ActivationCore):
+    @staticmethod
+    @nb.njit(cache=True)
+    def activate(x):
+        """Identity activation function. Input equals output.
 
+        Args:
+            x (ndarray): weighted sum of inputs.
+        """
+        return x
 
-def softmax(z):
-    """The Softmax activation function. Assures that no outliers can 
-    dominate too much.
-
-    Numerically stable sosftmax
-    https://eli.thegreenplace.net/2016/the-softmax-function-and-its-derivative/
-
-    Args:
-        x (ndarray): weighted sum of inputs.
-    """
-
-    z_exp = np.exp((z - np.max(z)))
-    return z_exp/np.sum(z_exp)
-
-
-def softmax_derivative(x):
-    """The derivative of the Softmax activation function.
-
-    Args:
-        x (ndarray): weighted sum of inputs.
-    """
-
-    S = softmax(x).reshape(-1, 1)
-    # return S - np.einsum("i...,j...->i...", S, S)
-    return (np.identity(S.shape[0]) - np.dot(S, S.T)).sum(axis=1,
-                                                          keepdims=True)
+    @staticmethod
+    @nb.njit(cache=True)
+    def derivative(x):
+        """Simply returns the derivative, 1, of the identity."""
+        return np.ones(x.shape)
 
 
-def heaviside(x):
-    """The Heaviside activation function.
+class Softmax(_ActivationCore):
+    @staticmethod
+    @nb.njit(cache=True)
+    def activate(x):
+        """The Softmax activation function. Assures that no outliers can 
+        dominate too much.
 
-    Args:
-        x (ndarray): weighted sum of inputs
-    """
-    return np.where(x >= 0, 1, 0)
+        Numerically stable sosftmax
+        https://eli.thegreenplace.net/2016/the-softmax-function-and-its-derivative/
+
+        Args:
+            x (ndarray): weighted sum of inputs.
+        """
+
+        z_exp = np.exp((x - np.max(x)))
+        return z_exp/np.sum(z_exp)
+
+    @staticmethod
+    def derivative(x):
+        """The derivative of the Softmax activation function.
+
+        Args:
+            x (ndarray): weighted sum of inputs.
+        """
+
+        S = Softmax.activate(x).reshape(-1, 1)
+        # return S - np.einsum("i...,j...->i...", S, S)
+        return (np.identity(S.shape[0]) - np.dot(S, S.T)).sum(axis=1,
+                                                              keepdims=True)
+
+class SoftmaxCrossEntropy(_ActivationCore):
+    @staticmethod
+    @nb.njit(cache=True)
+    def activate(x):
+        """The Softmax activation function. Assures that no outliers can 
+        dominate too much.
+
+        Numerically stable sosftmax
+        https://eli.thegreenplace.net/2016/the-softmax-function-and-its-derivative/
+
+        Args:
+            x (ndarray): weighted sum of inputs.
+        """
+
+        z_exp = np.exp((x - np.max(x)))
+        return z_exp/np.sum(z_exp)
+
+    @staticmethod
+    def derivative(x):
+        """The derivative of the Softmax activation function.
+
+        Args:
+            x (ndarray): weighted sum of inputs.
+        """
+        return np.empty((1))
 
 
-def heaviside_derivative(x):
-    """The derivative of the Heaviside activation function.
+class Heaviside(_ActivationCore):
+    @staticmethod
+    def activate(x):
+        """The Heaviside activation function.
 
-    Args:
-        x (ndarray): weighted sum of inputs
-    """
-    return np.zeros(x.shape)
+        Args:
+            x (ndarray): weighted sum of inputs
+        """
+        return np.where(x >= 0, 1, 0)
 
+    @staticmethod
+    @nb.njit(cache=True)
+    def derivative(x):
+        """The derivative of the Heaviside activation function.
 
-def relu(x):
-    """The rectifier activation function. Only activates if argument x is 
-    positive.
-
-    Args:
-        x (ndarray): weighted sum of inputs
-    """
-    # np.clip(x, 0, np.finfo(x.dtype).max, out=x)
-    # return x
-    return np.where(x >= 0, x, 0)
-
-
-def relu_derivative(x):
-    """The derivative of the tangens hyperbolicus activation function.
-
-    Args:
-        x (ndarray): weighted sum of inputs
-    """
-    return np.where(relu(x) > 0, 1, 0)
+        Args:
+            x (ndarray): weighted sum of inputs
+        """
+        return np.zeros(x.shape)
 
 
-def tanh_(x):
-    """The tangens hyperbolicus activation function.
+class Relu(_ActivationCore):
+    @staticmethod
+    def activate(x):
+        """The rectifier activation function. Only activates if argument x is 
+        positive.
 
-    Args:
-        x (ndarray): weighted sum of inputs
-    """
-    return np.tanh(x)
+        Args:
+            x (ndarray): weighted sum of inputs
+        """
+        # np.clip(x, 0, np.finfo(x.dtype).max, out=x)
+        # return x
+        return np.where(x >= 0, x, 0)
+
+    @staticmethod
+    def derivative(x):
+        """The derivative of the tangens hyperbolicus activation function.
+
+        Args:
+            x (ndarray): weighted sum of inputs
+        """
+        return np.where(Relu.activate(x) > 0, 1, 0)
 
 
-def tanh_derivative(x):
-    """The derivative of the tangens hyperbolicus activation function.
+class Tanh(_ActivationCore):
+    @staticmethod
+    @nb.njit(cache=True)
+    def activate(x):
+        """The tangens hyperbolicus activation function.
 
-    Args:
-        x (ndarray): weighted sum of inputs
-    """
-    return 1 - tanh_(x)**2
+        Args:
+            x (ndarray): weighted sum of inputs
+        """
+        return np.tanh(x)
+
+    @staticmethod
+    @nb.njit(cache=True)
+    def derivative(x):
+        """The derivative of the tangens hyperbolicus activation function.
+
+        Args:
+            x (ndarray): weighted sum of inputs
+        """
+        return 1 - np.tanh(x)**2
 
 
 # =============================================================================
@@ -237,40 +292,6 @@ class ExponentialCost(_BaseCost):
 # =============================================================================
 # REGULARIZATIONS
 # =============================================================================
-
-
-def _l1(weights):
-    """The L1 norm."""
-    return np.linalg.norm(weights, ord=1)
-
-
-def _l1_derivative(weights):
-    """The derivative of the L1 norm."""
-    # NOTE: Include this in report
-    # https://math.stackexchange.com/questions/141101/minimizing-l-1-regularization
-    return np.sign(weights)
-
-
-def _l2(weights):
-    """The L2 norm."""
-    return 0.5*np.dot(weights, weights)
-
-
-def _l2_derivative(weights):
-    """The derivative of the L2 norm."""
-    # NOTE: Include this in report
-    # https://math.stackexchange.com/questions/2792390/derivative-of-
-    # euclidean-norm-l2-norm
-    return weights
-
-
-def _elastic_net(weights):
-    return np.linalg.norm(weights, ord=1) + 0.5*np.dot(weights, weights)
-
-def _elastic_net_derivative(weights):
-    return np.sign(weights) + weights
-
-
 class _BaseRegularization:
     """Base cost function class."""
     @staticmethod

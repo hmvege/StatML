@@ -5,7 +5,7 @@ Methods mostly learned through the [FYSSTK3150/4150 course](https://compphysics.
 Goal is to use this repository as way of refreshing and teaching myself new methods.
 
 
-#### Folder structure
+#### Program folder structure
 ```
 lib/
 |--- neuralnetwork.py
@@ -23,7 +23,7 @@ lib/
 
 #### TODO-list:
 Current todo-list before starting on goals(not necessarily in that order):
-- [ ] Derive MLP backprop-algorithms properly and write pdf for it.
+- [x] Derive MLP backprop-algorithms properly and write pdf for it.
 - [ ] Parallelize(and jit) Cross-Validation, cross_validation.py
 - [ ] Jit optimize.py
 - [ ] Jit metrics.py
@@ -34,7 +34,7 @@ Current todo-list before starting on goals(not necessarily in that order):
 - [ ] Decide on if I am going to implement optimizers in logistic regression.
 
 
-#### Future work:
+#### Future/aspirational work:
 My goal is to implement the more machine learning and statistical methods in order to learn them myself. Following methods with examples will be implemented:
 - [ ] kNN classification
 - [ ] Rocchio classifier(Centroid classifier)
