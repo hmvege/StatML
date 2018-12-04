@@ -317,7 +317,6 @@ class L1Regularization(_BaseRegularization):
     @nb.njit(cache=True)
     def derivative(weights):
         """The derivative of the L1 norm."""
-        # NOTE: Include this in report
         # https://math.stackexchange.com/questions/141101/
         # minimizing-l-1-regularization
         return np.sign(weights)
@@ -334,7 +333,6 @@ class L2Regularization(_BaseRegularization):
     @nb.njit(cache=True)
     def derivative(weights):
         """The derivative of the L2 norm."""
-        # NOTE: Include this in report
         # https://math.stackexchange.com/questions/2792390/derivative-of-
         # euclidean-norm-l2-norm
         return weights

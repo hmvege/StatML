@@ -15,7 +15,7 @@ except ModuleNotFoundError:
 
 # TODO: implement the use of all cost functions for any output activation.
 # TODO: vectorize mini batch procedure.
-# TODO: parallize the mini batch procedure.
+# TODO: parallelize the mini batch procedure.
 
 def plot_image(sample_, label, pred):
     """Simple function for plotting the input."""

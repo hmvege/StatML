@@ -14,9 +14,6 @@ except ModuleNotFoundError:
     import lib.utils.optimize as uopt
     from lib.utils.math_tools import AVAILABLE_OUTPUT_ACTIVATIONS
 
-
-# TODO: validate SGD without minibatches
-# TODO: validate SGD with minibatches
 # TODO: implement momentum(see lecture notes on cd with momentum)
 # TODO: make optimizers take penalty argument?
 
