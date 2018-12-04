@@ -24,14 +24,13 @@ lib/
 #### TODO-list:
 Current todo-list before starting on goals(not necessarily in that order):
 - [x] Derive MLP backprop-algorithms properly and write pdf for it.
+- [x] Jit math_tools.py
+- [x] Jit logistic_regression.py
+- [x] Implemented optimizers in logistic regression(far inferior to the default one).
 - [ ] Parallelize(and jit) Cross-Validation, cross_validation.py
-- [ ] Jit optimize.py
-- [ ] Jit metrics.py
-- [ ] Jit math_tools.py
-- [ ] Jit logistic_regression.py
-- [ ] Jit the MLP
+- [ ] Jit the MLP, neuralnetwork.py.
+- [ ] Vectorize the MLP, neuralnetwork.py.
 - [ ] Parallelize the MLP, neuralnetwork.py
-- [ ] Decide on if I am going to implement optimizers in logistic regression.
 
 
 #### Future/aspirational work:

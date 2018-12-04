@@ -75,39 +75,39 @@ class _OptimizerBase(abc.ABC):
 class LogRegGradientDescent(_OptimizerBase):
     """Class tailored to logistic regression."""
 
-    # @staticmethod
-    # @nb.njit(cache=True)
-    # def _update_iter(X, y, beta, beta_prev, gradient, momentum, scale,
-    #     alpha):
+    @staticmethod
+    @nb.njit(cache=True)
+    def _update_iter(X, y, beta, beta_prev, gradient, momentum, scale,
+        alpha):
 
-    #     z = np.dot(X, beta)
-    #     p = 1.0/(1.0 + np.exp(-z ))
-    #     # p = expit(z)
+        z = np.dot(X, beta)
+        p = 1.0/(1.0 + np.exp(-z ))
+        # p = expit(z)
 
-    #     gradient_prev = gradient.copy()
-    #     gradient = -np.dot(X.T, y-p)/scale + alpha*beta/scale
+        gradient_prev = gradient.copy()
+        gradient = -np.dot(X.T, y-p)/scale + alpha*beta/scale
 
-    #     # Adds momentum
-    #     if momentum != 0:
-    #         gradient += gradient_prev*momentum
+        # Adds momentum
+        if momentum != 0:
+            gradient += gradient_prev*momentum
 
-    #     eta_k = np.dot((beta - beta_prev), gradient-gradient_prev) / \
-    #         np.linalg.norm(gradient-gradient_prev)**2
+        eta_k = np.dot((beta - beta_prev), gradient-gradient_prev) / \
+            np.linalg.norm(gradient-gradient_prev)**2
 
-    #     beta_prev = beta.copy()
-    #     beta -= eta_k*gradient
+        beta_prev = beta.copy()
+        beta -= eta_k*gradient
 
-    #     norm = np.linalg.norm(gradient)
-    #     return norm, beta, beta_prev, gradient
+        norm = np.linalg.norm(gradient)
+        return norm, beta, beta_prev, gradient
 
-    # @staticmethod
-    # @nb.njit(cache=True)
-    # def _first_step(X, beta, y, scale, alpha, eta):
-    #     z = np.dot(X, beta)
-    #     p = 1.0/(1.0 + np.exp(-z))
-    #     gradient = -np.dot(X.T, y-p)/scale + alpha*beta/scale
-    #     beta -= eta*gradient
-    #     return gradient, beta
+    @staticmethod
+    @nb.njit(cache=True)
+    def _first_step(X, beta, y, scale, alpha, eta):
+        z = np.dot(X, beta)
+        p = 1.0/(1.0 + np.exp(-z))
+        gradient = -np.dot(X.T, y-p)/scale + alpha*beta/scale
+        beta -= eta*gradient
+        return gradient, beta
 
     def solve(self, X, y, coef, cf, cf_prime, eta=1e-4, max_iter=1000,
               store_coefs=False, tol=1e-4, alpha=1.0, scale=1.0):
@@ -384,6 +384,8 @@ def _test_minimizers():
     tol = 1e-8
     eta = 1e-2
 
+    test_eps = 1e-5
+
     def f(_a, _b, x):
         # return x**2 - 612
         return x**4 - 3*x**3 + 2
@@ -422,19 +424,25 @@ def _test_minimizers():
     SGA_MB_x0 = SGA_MB_Solver.solve(x, a, b, f, f_prime, eta=eta, tol=tol,
                                     max_iter=int(1e8))
 
-    print("GradientDescent", f(a, b, GD_x0), f_prime(a, b, GD_x0), GD_x0)
-    print("ConjugateDescent", f(a, b, CG_x0), f_prime(a, b, CG_x0), CG_x0)
-    print("SGA", f(a, b, SGA_x0), f_prime(a, b, SGA_x0), SGA_x0)
-    print("SGA-MB", f(a, b, SGA_MB_x0), f_prime(a, b, SGA_MB_x0), SGA_MB_x0)
-    print("Newton-CG", f(a, b, NCG_x0), f_prime(a, b, NCG_x0), NCG_x0)
-    print("NewtonRaphson", f(a, b, NR_x0), f_prime(a, b, NR_x0), NR_x0)
+    print("GradientDescent:   ", f(a, b, GD_x0), f_prime(a, b, GD_x0), GD_x0)
+    print("SGA:               ", f(a, b, SGA_x0),
+          f_prime(a, b, SGA_x0), SGA_x0)
+    print("SGA-MB:            ", f(a, b, SGA_MB_x0),
+          f_prime(a, b, SGA_MB_x0), SGA_MB_x0)
+    print("Newton-CG:         ", f(a, b, NCG_x0),
+          f_prime(a, b, NCG_x0), NCG_x0)
+    print("ConjugateGradient: ", f(a, b, CG_x0), f_prime(a, b, CG_x0), CG_x0)
+    print("NewtonRaphson:     ", f(a, b, NR_x0), f_prime(a, b, NR_x0), NR_x0)
 
-    assert np.abs(GD_x0[0] - answer) < 1e-5, (
+    assert np.abs(GD_x0[0] - answer) < test_eps, (
         "GradientDescent is incorrect: {}".format(GD_x0[0]))
-    # assert np.abs(SGA_x0 - answer) < 1e-10, "SGA is incorrect"
-    # assert np.abs(SGA_MB_x0 - answer) < 1e-10, "SGA MB is incorrect"
-    # assert np.abs(NR_x0[0] - answer) < 1e-5, (
-    #     "Newton-Raphson is incorrect: {}".format(NR_x0[0]))
+    assert np.abs(SGA_x0 - answer) < test_eps, "SGA is incorrect"
+    assert np.abs(SGA_MB_x0 - answer) < test_eps, "SGA MB is incorrect"
+    assert np.abs(NCG_x0 - answer) < test_eps, "Newton-CG is incorrect"
+    assert np.abs(CG_x0[0] - answer) < test_eps, (
+        "ConjugateGradient is incorrect: {}".format(CG_x0[0]))
+    assert np.abs(NR_x0[0] - answer) < test_eps, (
+        "Newton-Raphson is incorrect: {}".format(NR_x0[0]))
 
     print("All methods converged.")
 

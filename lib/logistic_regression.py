@@ -332,8 +332,8 @@ def __test_logistic_regression():
     max_iter = 1000000
     # Available solvers:
     # ["lr-gd", "gd", "cg", "sga", "sga-mb", "nr", "newton-cg"]
-    solver = "lr-gd"
-    # solver = "newton-cg"
+    # solver = "lr-gd"
+    solver = "sga-mb"
     activation = "sigmoid"
     tol = 1e-8
     alpha = 0.1
