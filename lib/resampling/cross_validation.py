@@ -13,6 +13,9 @@ except ModuleNotFoundError:
 import sklearn.model_selection as sk_modsel
 import sklearn.metrics as sk_metrics
 
+import numba as nb
+import multiprocessing as mp
+
 __all__ = ["kFoldCrossValidation", "MCCrossValidation"]
 
 # TODO: parallelize kf-CV
@@ -76,6 +79,24 @@ class __CV_core:
 class kFoldCrossValidation(__CV_core):
     """Class for performing k-fold cross validation."""
 
+    @staticmethod
+    def _kfcv_core(ik, set_list, X_subdata, y_subdata, X_test, reg):
+        """Core part of the kf-CV."""
+        # Sets up new data set
+        k_X_train = np.concatenate([X_subdata[d] for d in set_list])
+        k_y_train = np.concatenate([y_subdata[d] for d in set_list])
+
+        # Trains method bu fitting data
+        reg.fit(k_X_train, k_y_train)
+
+        # Getting a prediction given the test data
+        y_predict = reg.predict(X_test).ravel()
+
+        # Returns prediction and beta coefs
+        # self.y_pred_list[:, ik] = y_predict
+        # beta_coefs.append(reg.coef_)
+        return ik, y_predict, reg.coef_
+
     def cross_validate(self, k_splits=5, test_percent=0.2, shuffle=False,
                        X_test=None, y_test=None):
         """
@@ -120,15 +141,19 @@ class kFoldCrossValidation(__CV_core):
         beta_coefs = []
         self.y_pred_list = np.empty((test_size, k_splits))
 
+        # Sets up set lists
+        set_lists = []
+        for ik in range(k_splits):
+            tmp_set_list = list(range(k_splits))
+            tmp_set_list.pop(ik)
+            set_lists.append(tmp_set_list)
+
+        # Main kf-CV loop
         for ik in tqdm(range(k_splits), desc="k-fold Cross Validation"):
 
-            # Sets up indexes
-            set_list = list(range(k_splits))
-            set_list.pop(ik)
-
             # Sets up new data set
-            k_X_train = np.concatenate([X_subdata[d] for d in set_list])
-            k_y_train = np.concatenate([y_subdata[d] for d in set_list])
+            k_X_train = np.concatenate([X_subdata[d] for d in set_lists[ik]])
+            k_y_train = np.concatenate([y_subdata[d] for d in set_lists[ik]])
 
             # Trains method bu fitting data
             self.reg.fit(k_X_train, k_y_train)
@@ -654,6 +679,58 @@ def __compare_kfold_cv():
 def __compare_mc_cv():
     raise NotImplementedError("__compare_mc_cv")
 
+def __time_cross_validations():
+    """Timing the methods."""
+    import time
+    from regression import OLSRegression
+    import sklearn.preprocessing as sk_preproc
+
+    # Initial values
+    n = 10000
+    N_bs = 200
+    deg = 2
+    k_splits = 4
+    test_percent = 0.35
+    noise = 0.3
+    np.random.seed(1234)
+    # Sets up random matrices
+    x = np.random.rand(n, 1)
+
+    y = 2*x*x + np.exp(-2*x) + noise*np.random.randn(x.shape[0], x.shape[1])
+
+    # Sets up design matrix
+    poly = sk_preproc.PolynomialFeatures(degree=deg, include_bias=True)
+    X = poly.fit_transform(x)
+
+    # k-fold Cross validation
+    t0_kfcv = time.time()
+
+    kfcv = kFoldCrossValidation(X, y, OLSRegression())
+    kfcv.cross_validate(k_splits=k_splits,
+                        test_percent=test_percent)
+
+    t1_kfcv = time.time()
+
+    # k-k-fold Cross validation
+    t0_kkfcv = time.time()
+
+    kkfcv = kkFoldCrossValidation(X, y, OLSRegression())
+    kkfcv.cross_validate(k_splits=k_splits,
+                        test_percent=test_percent)
+
+    t1_kkfcv = time.time()
+
+    # mc Cross validation
+    t0_mccv = time.time()
+
+    mccv = MCCrossValidation(X, y, OLSRegression())
+    mccv.cross_validate(N_bs, k_splits=k_splits,
+                        test_percent=test_percent)
+    t1_mccv = time.time()
+
+    print("Time taken for kf-cv:  {:.8f} seconds".format(t1_kfcv-t0_kfcv))
+    print("Time taken for kkf-cv: {:.8f} seconds".format(t1_kkfcv-t0_kkfcv))
+    print("Time taken for mc-cv:  {:.8f} seconds".format(t1_mccv-t0_mccv))
 
 def __test_cross_validation_methods():
     # A small implementation of a test case
@@ -750,7 +827,7 @@ def __test_cross_validation_methods():
     plt.title(r"$y=2x^2 + e^{-2x}$")
     y = 2*x*x + np.exp(-2*x) + noise*np.random.randn(x.shape[0], x.shape[1])
     plt.legend()
-    plt.show()
+    # plt.show()
 
 
 def __test_bias_variance_kfcv():
@@ -806,16 +883,16 @@ def __test_bias_variance_kfcv():
     ax.set_ylabel(r"MSE/Var/Bias")
     ax.set_ylim(-0.01, 0.2)
     ax.legend()
-    plt.show()
+    # plt.show()
     plt.close(fig)
 
 
 def __test_bias_variance_kkfcv():
-    """Checks bias-variance relation."""
+    # """Checks bias-variance relation."""
     from regression import OLSRegression
-    import sklearn.linear_model as sk_model
-    import sklearn.preprocessing as sk_preproc
-    import matplotlib.pyplot as plt
+    # import sklearn.linear_model as sk_model
+    # import sklearn.preprocessing as sk_preproc
+    # import matplotlib.pyplot as plt
 
     # Initial values
     N_polynomials = 30
@@ -863,16 +940,16 @@ def __test_bias_variance_kkfcv():
     ax.set_ylabel(r"MSE/Var/Bias")
     ax.set_ylim(-0.01, 0.2)
     ax.legend()
-    plt.show()
+    # plt.show()
     plt.close(fig)
 
 
 def __test_bias_variance_mccv():
-    """Checks bias-variance relation."""
+    # """Checks bias-variance relation."""
     from regression import OLSRegression
-    import sklearn.linear_model as sk_model
-    import sklearn.preprocessing as sk_preproc
-    import matplotlib.pyplot as plt
+    # import sklearn.linear_model as sk_model
+    # import sklearn.preprocessing as sk_preproc
+    # import matplotlib.pyplot as plt
 
     # Initial values
     N_polynomials = 30
@@ -920,13 +997,14 @@ def __test_bias_variance_mccv():
     ax.set_ylabel(r"MSE/Var/Bias")
     ax.set_ylim(-0.01, 0.2)
     ax.legend()
-    plt.show()
+    # plt.show()
     plt.close(fig)
 
 
 if __name__ == '__main__':
-    __test_cross_validation_methods()
-    __test_bias_variance_kfcv()
-    __test_bias_variance_kkfcv()
-    __test_bias_variance_mccv()
-    __compare_kfold_cv()
+    # __test_cross_validation_methods()
+    # __test_bias_variance_kfcv()
+    # __test_bias_variance_kkfcv()
+    # __test_bias_variance_mccv()
+    # __compare_kfold_cv()
+    __time_cross_validations()
