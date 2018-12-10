@@ -17,6 +17,7 @@ import sklearn.metrics as sk_metrics
 import numba as nb
 import multiprocessing as mp
 
+
 @nb.njit(cache=True)
 def boot(*data):
     """Strip-down version of the bootstrap method. Compiled with numba's njit.
@@ -101,7 +102,6 @@ class BootstrapRegression:
             reg.coef_,  # Stores the prediction and beta coefs.
         ]
 
-
     @metrics.timing_function
     def bootstrap(self, N_bs, test_percent=0.25, X_test=None, y_test=None,
                   shuffle=False, numprocs=0):
@@ -150,10 +150,7 @@ class BootstrapRegression:
 
         # Sets up emtpy lists for gathering the relevant scores in
         r2_list = np.empty(N_bs)
-        # print(N_bs, X_train.shape[-1], y_train.shape, X_train.shape)
-        # exit(1)
         beta_coefs = np.empty((N_bs, y_train.shape[-1], X_test.shape[-1]))
-
         y_pred_list = np.empty((X_test.shape[0], N_bs))
 
         if numprocs != 0:
@@ -162,16 +159,16 @@ class BootstrapRegression:
 
                 # Sets up jobs for parallel processing
                 input_values = list(zip([X_train for i in range(N_bs)],
-                                   [y_train for i in range(N_bs)],
-                                   [X_test for i in range(N_bs)],
-                                   [y_test for i in range(N_bs)],
-                                   [self.reg for i in range(N_bs)]))
-                    
+                                        [y_train for i in range(N_bs)],
+                                        [X_test for i in range(N_bs)],
+                                        [y_test for i in range(N_bs)],
+                                        [self.reg for i in range(N_bs)]))
 
                 # Runs parallel processes. Can this be done more efficiently?
                 # import time
                 # t0 = time.time()
-                results = p.imap_unordered(self._para_bs, input_values, chunksize=N_bs//numprocs)
+                results = p.imap_unordered(
+                    self._para_bs, input_values, chunksize=N_bs//numprocs)
                 # t1 = time.time()
                 # print("TIME imap_unordered:", t1-t0)
 
@@ -190,7 +187,6 @@ class BootstrapRegression:
                     r2_list[i_bs] = res_[0]
                     y_pred_list[:, i_bs] = res_[1].ravel()
                     beta_coefs[i_bs] = res_[2]
-                
 
         else:
             # Bootstraps
@@ -520,7 +516,7 @@ def __test_compare_bootstrap_manual_sklearn():
     deg = 2
     poly = sk_preproc.PolynomialFeatures(degree=deg, include_bias=True)
 
-    N_processsors=8
+    N_processsors = 8
 
     N_bs = 10000
 

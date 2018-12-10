@@ -6,7 +6,7 @@ from tqdm import tqdm
 try:
     import sys
     sys.path.insert(0, "../")
-    from utils import metrics 
+    from utils import metrics
 except ModuleNotFoundError:
     import metrics
 
@@ -22,11 +22,12 @@ __all__ = ["kFoldCrossValidation", "MCCrossValidation"]
 # TODO: parallelize kkf-CV
 # TODO: parallelize mc-kf-CV
 
+
 class __CV_core:
     """Core class for performing k-fold cross validation."""
     _reg = None
 
-    def __init__(self, X_data, y_data, reg):
+    def __init__(self, X_data, y_data, reg, numprocs=1):
         """Initializer for Cross Validation.
 
         Args:
@@ -47,6 +48,11 @@ class __CV_core:
         self.y_data = cp.deepcopy(y_data)
 
         self._reg = reg
+
+        if numprocs <= 1:
+            self.numprocs = 1
+        else:
+            self.numprocs = numprocs
 
     @property
     def reg(self):
@@ -80,8 +86,10 @@ class kFoldCrossValidation(__CV_core):
     """Class for performing k-fold cross validation."""
 
     @staticmethod
-    def _kfcv_core(ik, set_list, X_subdata, y_subdata, X_test, reg):
+    # @nb.jit(cache=True)
+    def _kfcv_core(input_values):
         """Core part of the kf-CV."""
+        ik, set_list, X_subdata, y_subdata, X_test, reg = input_values
         # Sets up new data set
         k_X_train = np.concatenate([X_subdata[d] for d in set_list])
         k_y_train = np.concatenate([y_subdata[d] for d in set_list])
@@ -93,8 +101,6 @@ class kFoldCrossValidation(__CV_core):
         y_predict = reg.predict(X_test).ravel()
 
         # Returns prediction and beta coefs
-        # self.y_pred_list[:, ik] = y_predict
-        # beta_coefs.append(reg.coef_)
         return ik, y_predict, reg.coef_
 
     def cross_validate(self, k_splits=5, test_percent=0.2, shuffle=False,
@@ -138,7 +144,7 @@ class kFoldCrossValidation(__CV_core):
 
         # Stores the test values from each k trained data set in an array
         r2_list = np.empty(k_splits)
-        beta_coefs = []
+        beta_coefs = np.empty((k_splits, y_train.shape[-1], X_test.shape[-1]))
         self.y_pred_list = np.empty((test_size, k_splits))
 
         # Sets up set lists
@@ -148,22 +154,52 @@ class kFoldCrossValidation(__CV_core):
             tmp_set_list.pop(ik)
             set_lists.append(tmp_set_list)
 
-        # Main kf-CV loop
-        for ik in tqdm(range(k_splits), desc="k-fold Cross Validation"):
+        if self.numprocs == 1:
+            # Main kf-CV loop
+            for ik in tqdm(range(k_splits), desc="k-fold Cross Validation"):
 
-            # Sets up new data set
-            k_X_train = np.concatenate([X_subdata[d] for d in set_lists[ik]])
-            k_y_train = np.concatenate([y_subdata[d] for d in set_lists[ik]])
+                # Sets up new data set
+                k_X_train = np.concatenate(
+                    [X_subdata[d] for d in set_lists[ik]])
+                k_y_train = np.concatenate(
+                    [y_subdata[d] for d in set_lists[ik]])
 
-            # Trains method bu fitting data
-            self.reg.fit(k_X_train, k_y_train)
+                # Trains method bu fitting data
+                self.reg.fit(k_X_train, k_y_train)
 
-            # Getting a prediction given the test data
-            y_predict = self.reg.predict(X_test).ravel()
+                # Getting a prediction given the test data
+                y_predict = self.reg.predict(X_test).ravel()
 
-            # Appends prediction and beta coefs
-            self.y_pred_list[:, ik] = y_predict
-            beta_coefs.append(self.reg.coef_)
+                # Appends prediction and beta coefs
+                self.y_pred_list[:, ik] = y_predict
+                beta_coefs = self.reg.coef_
+        else:
+            # Initializes multiprocessing
+            with mp.Pool(processes=self.numprocs) as p:
+
+                # Sets up jobs for parallel processing
+                input_values = list(zip(list(range(k_splits)),
+                                        set_lists,
+                                        [X_subdata for i in range(k_splits)],
+                                        [y_subdata for i in range(k_splits)],
+                                        [X_test for i in range(k_splits)],
+                                        [self.reg for i in range(k_splits)]))
+
+
+                # Runs parallel processes
+                # import time
+                # t0 = time.time()
+                results = p.imap_unordered(self._kfcv_core, input_values)
+                # t1 = time.time()
+                # print("TIME imap_unordered:", t1-t0)
+                # for i_kf, res_ in enumerate(sorted(results, key=lambda k: k[0])):
+                for i_kf, res_ in enumerate(results):
+                    self.y_pred_list[:, i_kf] = res_[1]
+                    beta_coefs[i_kf] = res_[2].T
+                # exit(1)
+                # return ik, y_predict, reg.coef_
+                # # Populates result lists
+                # for i_bs, res_ in enumerate(results):
 
         # Mean Square Error, mean((y - y_approx)**2)
         _mse = (y_test - self.y_pred_list)**2
@@ -225,7 +261,6 @@ class kkFoldCrossValidation(__CV_core):
             y_train = self.y_data
             X_test = cp.deepcopy(X_test)
             y_test = cp.deepcopy(y_test)
-
 
         N_total_size = X_train.shape[0]
 
@@ -375,7 +410,6 @@ class MCCrossValidation(__CV_core):
             y_train = self.y_data
             X_test = cp.deepcopy(X_test)
             y_test = cp.deepcopy(y_test)
-
 
         # Splits dataset into managable k fold tests
         mc_test_size = X_train.shape[0] // k_splits
@@ -679,6 +713,7 @@ def __compare_kfold_cv():
 def __compare_mc_cv():
     raise NotImplementedError("__compare_mc_cv")
 
+
 def __time_cross_validations():
     """Timing the methods."""
     import time
@@ -686,10 +721,11 @@ def __time_cross_validations():
     import sklearn.preprocessing as sk_preproc
 
     # Initial values
-    n = 10000
-    N_bs = 200
+    n = 1000000
+    N_bs = 4
     deg = 2
-    k_splits = 4
+    k_splits = 8
+    numprocs = 1
     test_percent = 0.35
     noise = 0.3
     np.random.seed(1234)
@@ -704,25 +740,20 @@ def __time_cross_validations():
 
     # k-fold Cross validation
     t0_kfcv = time.time()
-
-    kfcv = kFoldCrossValidation(X, y, OLSRegression())
+    kfcv = kFoldCrossValidation(X, y, OLSRegression(), numprocs=numprocs)
     kfcv.cross_validate(k_splits=k_splits,
                         test_percent=test_percent)
-
     t1_kfcv = time.time()
 
     # k-k-fold Cross validation
     t0_kkfcv = time.time()
-
     kkfcv = kkFoldCrossValidation(X, y, OLSRegression())
     kkfcv.cross_validate(k_splits=k_splits,
-                        test_percent=test_percent)
-
+                         test_percent=test_percent)
     t1_kkfcv = time.time()
 
     # mc Cross validation
     t0_mccv = time.time()
-
     mccv = MCCrossValidation(X, y, OLSRegression())
     mccv.cross_validate(N_bs, k_splits=k_splits,
                         test_percent=test_percent)
@@ -731,6 +762,7 @@ def __time_cross_validations():
     print("Time taken for kf-cv:  {:.8f} seconds".format(t1_kfcv-t0_kfcv))
     print("Time taken for kkf-cv: {:.8f} seconds".format(t1_kkfcv-t0_kkfcv))
     print("Time taken for mc-cv:  {:.8f} seconds".format(t1_mccv-t0_mccv))
+
 
 def __test_cross_validation_methods():
     # A small implementation of a test case
@@ -865,9 +897,9 @@ def __test_bias_variance_kfcv():
         X = poly.fit_transform(x_train)
 
         results = kFoldCVWrapper(X, y_train, sk_model.LinearRegression(
-                                    fit_intercept=False),
-                                 X_test=poly.fit_transform(x_test),
-                                 y_test=y_test)
+            fit_intercept=False),
+            X_test=poly.fit_transform(x_test),
+            y_test=y_test)
 
         mse_list[i] = results["mse"]
         var_list[i] = results["var"]
@@ -922,9 +954,9 @@ def __test_bias_variance_kkfcv():
         X = poly.fit_transform(x_train)
 
         results = kkfoldCVWrapper(X, y_train, sk_model.LinearRegression(
-                                    fit_intercept=False),
-                                  X_test=poly.fit_transform(x_test),
-                                  y_test=y_test)
+            fit_intercept=False),
+            X_test=poly.fit_transform(x_test),
+            y_test=y_test)
 
         mse_list[i] = results["mse"]
         var_list[i] = results["var"]
@@ -980,8 +1012,8 @@ def __test_bias_variance_mccv():
         X = poly.fit_transform(x_train)
 
         results = MCCVWrapper(X, y_train, sk_model.LinearRegression(
-                                    fit_intercept=False), N_bs,
-                              X_test=poly.fit_transform(x_test), y_test=y_test)
+            fit_intercept=False), N_bs,
+            X_test=poly.fit_transform(x_test), y_test=y_test)
 
         mse_list[i] = results["mse"]
         var_list[i] = results["var"]
