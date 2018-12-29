@@ -1,6 +1,7 @@
 datafiles*
 __pycache__*
 *.pyc
+*.DS_Store
 
 # Latex junk
 *.aux

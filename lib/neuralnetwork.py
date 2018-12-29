@@ -12,10 +12,14 @@ except ModuleNotFoundError:
         AVAILABLE_OUTPUT_ACTIVATIONS, AVAILABLE_COST_FUNCTIONS, \
         AVAILABLE_REGULARIZATIONS
 
+# Temporary imports for performance testing
+import time
+import numba as nb
 
 # TODO: implement the use of all cost functions for any output activation.
 # TODO: vectorize mini batch procedure.
 # TODO: parallelize the mini batch procedure.
+
 
 def plot_image(sample_, label, pred):
     """Simple function for plotting the input."""
@@ -96,6 +100,10 @@ class MultilayerPerceptron:
 
         # Sets up biases
         self.biases = [np.random.randn(l_j, 1) for l_j in layer_sizes[1:]]
+
+        # Sets up activations and forward-pass values
+        self.activations = [np.empty(s_).reshape(-1, 1) for s_ in layer_sizes]
+        self.z = [np.empty(b.shape) for b in self.biases]
 
         self.layer_sizes = layer_sizes
         self.N_layers = len(layer_sizes)
@@ -247,13 +255,18 @@ class MultilayerPerceptron:
     def _forward_pass(self, activation):
         """Performs a feed-forward to the last layer."""
         activations = [activation]
-        for i in range(self.N_layers - 1):
+        for i in range(self.N_layers - 2):
             z = (self.weights[i] @ activations[i])
             z += self.biases[i]
 
-            if i+1 != (self.N_layers - 1):
-                activations.append(self._activation.activate(z))
+            # if i+1 != (self.N_layers - 1):
+            #     # activations.append(self._activation.activate(self._fp_core(
+            #     #     self.weights[i], self.biases[i], activations[i])))
+            #     activations.append(self._activation.activate(z))
+            activations.append(self._activation.activate(z))
 
+        # activations.append(self._output_activation.activate(self._fp_core(
+        #             self.weights[-1], self.biases[-1], activations[-1])))
         activations.append(self._output_activation.activate(z))
 
         return activations
@@ -271,19 +284,19 @@ class MultilayerPerceptron:
         """
 
         # Retrieves the z and sigmoid for each layer in sample
-        z_list = []
-        self.activations = [x]
+        self.activations[0] = x
+
         for i in range(self.N_layers - 1):
-            z = self.weights[i] @ self.activations[i]
-            z += self.biases[i]
-            z_list.append(z)
+            self.z[i] = self.weights[i] @ self.activations[i]
+            self.z[i] += self.biases[i]
 
             if (i+1) != (self.N_layers - 1):
                 # Middle layer(s) activation
-                self.activations.append(self._activation.activate(z))
+                self.activations[i+1] = self._activation.activate(self.z[i])
             else:
                 # Sigmoid output layer
-                self.activations.append(self._output_activation.activate(z).T)
+                self.activations[i+1] = \
+                    self._output_activation.activate(self.z[i])
 
         # Backpropegation begins, initializes the backpropagation derivatives
         delta_w = [np.empty(w.shape) for w in self.weights]
@@ -291,19 +304,8 @@ class MultilayerPerceptron:
 
         # Gets initial delta value, first of the four equations
         delta = self._cost.delta(
-                self.activations[-1], y,
-                self._output_activation.derivative(z_list[-1]).T).T
-
-        # if self.cost_function == "mse":
-        #     delta = self._cost.delta(
-        #         self.activations[-1], y,
-        #         self._output_activation.derivative(z_list[-1]).T).T
-        # else:  # cross entropy
-        #     delta = self._cost.delta(
-        #         self.activations[-1], y,
-        #         None).T
-        # delta = self._cost.delta(self.activations[-1], y,
-        #                              None).T
+            self.activations[-1].T, y,
+            self._output_activation.derivative(self.z[-1]).T).T
 
         # Sets last element before back-propagating
         delta_b[-1] = delta
@@ -315,8 +317,8 @@ class MultilayerPerceptron:
         # Loops over layers
         for l in range(2, self.N_layers):
             # Retrieves the z and gets it's derivative
-            z = z_list[-l]
-            sp = self._activation.derivative(z)
+            z_ = self.z[-l]
+            sp = self._activation.derivative(z_)
 
             # Sets up delta^l
             delta = self.weights[-l+1].T @ delta
@@ -406,10 +408,23 @@ class MultilayerPerceptron:
                 shuffled_labels[i:i+mini_batch_size]
                 for i in range(0, N_train_size, number_batches)]
 
+            avg_update_time = []
+
             # Iterates over mini batches
             for mb_data, mb_labels in zip(shuffled_data, shuffled_labels):
 
+                # Time tracking
+                t0 = time.time()
+
                 self.update_mini_batch(mb_data, mb_labels, eta_)
+
+                # Time tracking
+                t1 = time.time()
+                avg_update_time.append(t1-t0)
+
+            # Time tracking
+            tqdm.write("Mean MB update time: {}".format(
+                np.mean(avg_update_time)))
 
             # If we have provided testing data, we perform an epoch evaluation
             if perform_eval:
@@ -547,10 +562,10 @@ def __test_mlp_mnist():
     alpha = 0.0
     regularization = "l2"
     mini_batch_size = 20
-    epochs = 100
+    epochs = 10
     eta = "inverse"  # Options: float, 'inverse'
     eta0 = 1.0
-    verbose = True
+    verbose = False
 
     # Sets up my MLP.
     MLP = MultilayerPerceptron([data_train_samples.shape[1], 30, 10],
@@ -560,6 +575,9 @@ def __test_mlp_mnist():
                                weight_init=weight_init,
                                alpha=alpha,
                                regularization=regularization)
+    # Timing
+    t0_train = time.time()
+
     MLP.train(data_train_samples, data_train_labels,
               data_test=data_test_samples,
               data_test_labels=data_test_labels,
@@ -568,6 +586,13 @@ def __test_mlp_mnist():
               eta=eta,
               eta0=eta0,
               verbose=verbose)
+
+    # Timing
+    t1_train = time.time()
+    print("*"*100)
+    print("Training time: {0:.4f} seconds".format(t1_train-t0_train))
+    print("*"*100)
+
     print(MLP.score(data_test_samples, data_test_labels))
     MLP.evaluate(data_test_samples, data_test_labels, show_image=False)
 
@@ -707,11 +732,13 @@ def __test_nn_sklearn_comparison():
     X_test3 = np.array([np.random.rand(10)])
     y_test3 = np.array([8.29289285])
 
-    test_regressor(X_train1, y_train1, X_test1, y_test1,
-                   layer_sizes1, sk_hidden_layers1, "sigmoid", "softmax")
-    test_regressor(X_train2, y_train2, X_test2, y_test2,
-                   layer_sizes2, sk_hidden_layers2, "sigmoid", "identity",
-                   alpha=0.5)
+    # test_regressor(X_train1, y_train1, X_test1, y_test1,
+    #                layer_sizes1, sk_hidden_layers1, "sigmoid", "softmax")
+
+    # test_regressor(X_train2, y_train2, X_test2, y_test2,
+    #                layer_sizes2, sk_hidden_layers2, "sigmoid", "identity",
+    #                alpha=0.5)
+
     test_regressor(X_train3, y_train3, X_test3, y_test3,
                    layer_sizes3, sk_hidden_layers3, "sigmoid", "sigmoid")
 
@@ -719,5 +746,5 @@ def __test_nn_sklearn_comparison():
 
 
 if __name__ == '__main__':
-    __test_mlp_mnist()
-    # __test_nn_sklearn_comparison()
+    # __test_mlp_mnist()
+    __test_nn_sklearn_comparison()

@@ -36,8 +36,8 @@ class __CV_core:
                 approximated.
             reg (Regression Instance): an initialized regression method
         """
-        assert X_data.shape[0] == len(
-            y_data), "x and y data not of equal lengths"
+        assert X_data.shape[0] == len(y_data), (
+            "x and y data not of equal lengths")
 
         assert hasattr(reg, "fit"), ("regression method must have "
                                      "attribute fit()")
@@ -725,7 +725,7 @@ def __time_cross_validations():
     N_bs = 4
     deg = 2
     k_splits = 8
-    numprocs = 1
+    numprocs = 4
     test_percent = 0.35
     noise = 0.3
     np.random.seed(1234)
@@ -739,8 +739,15 @@ def __time_cross_validations():
     X = poly.fit_transform(x)
 
     # k-fold Cross validation
-    t0_kfcv = time.time()
+    t0_kfcv_mp = time.time()
     kfcv = kFoldCrossValidation(X, y, OLSRegression(), numprocs=numprocs)
+    kfcv.cross_validate(k_splits=k_splits,
+                        test_percent=test_percent)
+    t1_kfcv_mp = time.time()
+
+    # k-fold Cross validation no parallelization
+    t0_kfcv = time.time()
+    kfcv = kFoldCrossValidation(X, y, OLSRegression(), numprocs=1)
     kfcv.cross_validate(k_splits=k_splits,
                         test_percent=test_percent)
     t1_kfcv = time.time()
@@ -759,9 +766,12 @@ def __time_cross_validations():
                         test_percent=test_percent)
     t1_mccv = time.time()
 
+    print("**Non-parallel**")
     print("Time taken for kf-cv:  {:.8f} seconds".format(t1_kfcv-t0_kfcv))
     print("Time taken for kkf-cv: {:.8f} seconds".format(t1_kkfcv-t0_kkfcv))
     print("Time taken for mc-cv:  {:.8f} seconds".format(t1_mccv-t0_mccv))
+    print("**Parallelized**")
+    print("Time taken for kf-cv:  {:.8f} seconds".format(t1_kfcv_mp-t0_kfcv_mp))
 
 
 def __test_cross_validation_methods():
@@ -771,7 +781,7 @@ def __test_cross_validation_methods():
     import matplotlib.pyplot as plt
 
     # Initial values
-    n = 100
+    n = 1000
     N_bs = 200
     deg = 2
     k_splits = 4
