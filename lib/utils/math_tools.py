@@ -126,8 +126,7 @@ class SoftmaxCrossEntropy(_ActivationCore):
         Args:
             x (ndarray): weighted sum of inputs.
         """
-        raise NotImplementedError("Bad! SoftMax CE not done!")
-        return np.empty((1))
+        return None
 
 
 class Heaviside(_ActivationCore):
@@ -239,7 +238,7 @@ class MSECost(_BaseCost):
     @staticmethod
     @nb.njit(cache=True)
     def delta(a, y, a_prime):
-        return (a - y)# * a_prime
+        return (a - y) * a_prime
 
 
 class LogEntropyCost(_BaseCost):
@@ -265,7 +264,31 @@ class LogEntropyCost(_BaseCost):
     @nb.njit(cache=True)
     def delta(a, y, a_prime):
         return a - y  # For softmax
-        # return (- y / a) * a_prime # General expr, still a bit bugged smh
+        # return (- y / a) #* a_prime # General expr, still a bit bugged smh
+
+
+class LogEntropyCostSigmoid(_BaseCost):
+    """
+    Cross entropy cost function.
+    """
+    @staticmethod
+    @nb.njit(cache=True)
+    def cost(a, y):
+        """Returns cost function.
+
+        Args:
+            a (ndarray): layer output.
+            y (ndarray): true output.
+        Return:
+            (float): cost function output.
+        """
+        return - np.mean(y*np.log(a))  # + (1 - y)*np.log(1 - a))
+
+    @staticmethod
+    @nb.njit(cache=True)
+    def delta(a, y, a_prime):
+        # return a - y  # For softmax
+        return (- y / a) * a_prime # General expr, still a bit bugged smh
 
 
 class ExponentialCost(_BaseCost):

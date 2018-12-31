@@ -305,14 +305,7 @@ class MultilayerPerceptron:
         # Gets initial delta value, first of the four equations
         delta = self._cost.delta(
             self.activations[-1].T, y,
-            self._output_activation.derivative(self.z[-1])).T
-
-        # print(y)
-        # print(delta, self.activations[-1].T, self._output_activation.derivative(self.z[-1]))
-        # exit(1)
-        # print(self.activations)
-        # print(dir(self._output_activation), self._output_activation.__class__)
-        # print(delta, self.activations[-1].T,y , self._output_activation.derivative(self.z[-1]))
+            self._output_activation.derivative(self.z[-1]).T).T
 
         # Sets last element before back-propagating
         delta_b[-1] = delta
@@ -415,23 +408,23 @@ class MultilayerPerceptron:
                 shuffled_labels[i:i+mini_batch_size]
                 for i in range(0, N_train_size, number_batches)]
 
-            avg_update_time = []
+            # avg_update_time = []
 
             # Iterates over mini batches
             for mb_data, mb_labels in zip(shuffled_data, shuffled_labels):
 
-                # Time tracking
-                t0 = time.time()
+                # # Time tracking
+                # t0 = time.time()
 
                 self.update_mini_batch(mb_data, mb_labels, eta_)
 
-                # Time tracking
-                t1 = time.time()
-                avg_update_time.append(t1-t0)
+                # # Time tracking
+                # t1 = time.time()
+                # avg_update_time.append(t1-t0)
 
-            # Time tracking
-            tqdm.write("Mean MB update time: {}".format(
-                np.mean(avg_update_time)))
+            # # Time tracking
+            # tqdm.write("Mean MB update time: {}".format(
+            #     np.mean(avg_update_time)))
 
             # If we have provided testing data, we perform an epoch evaluation
             if perform_eval:
@@ -560,9 +553,9 @@ def __test_mlp_mnist():
     # Activation options: "sigmoid", "identity", "relu", "tanh", "heaviside"
     activation = "tanh"
     # Cost function options: "mse", "log_loss", "exponential_cost"
-    cost_function = "log_loss"
+    cost_function = "mse"
     # Output activation options:  "identity", "sigmoid", "softmax"
-    output_activation = "softmax"
+    output_activation = "sigmoid"
     # Weight initialization options:
     # default(sigma=1/sqrt(N_samples)), large(sigma=1.0)
     weight_init = "default"
@@ -572,7 +565,7 @@ def __test_mlp_mnist():
     epochs = 10
     eta = "inverse"  # Options: float, 'inverse'
     eta0 = 1.0
-    verbose = False
+    verbose = True
 
     # Sets up my MLP.
     MLP = MultilayerPerceptron([data_train_samples.shape[1], 30, 10],
@@ -630,8 +623,6 @@ def __test_nn_sklearn_comparison():
             hidden_layer_sizes=sk_hidden_layers)  # Full NN size is (1,3,3,1).
 
         mlp.out_activation_ = sk_output_activation
-        print(dir(mlp))
-        exit(1)
 
         # Force sklearn to set up all the necessary matrices by fitting a data
         # set. We dont care if it converges or not, so lets ignore raised
@@ -744,6 +735,7 @@ def __test_nn_sklearn_comparison():
     X_test3 = np.array([np.random.rand(10)])
     y_test3 = np.array([8.29289285])
 
+    # Note: need to run with (a-y), and not (a-y)*a_prime in delta derivative.
     test_regressor(X_train1, y_train1, X_test1, y_test1,
                    layer_sizes1, sk_hidden_layers1, "sigmoid", "softmax")
 
@@ -758,5 +750,5 @@ def __test_nn_sklearn_comparison():
 
 
 if __name__ == '__main__':
-    # __test_mlp_mnist()
-    __test_nn_sklearn_comparison()
+    __test_mlp_mnist()
+    # __test_nn_sklearn_comparison()
