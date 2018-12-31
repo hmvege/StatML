@@ -126,6 +126,7 @@ class SoftmaxCrossEntropy(_ActivationCore):
         Args:
             x (ndarray): weighted sum of inputs.
         """
+        raise NotImplementedError("Bad! SoftMax CE not done!")
         return np.empty((1))
 
 
@@ -238,7 +239,7 @@ class MSECost(_BaseCost):
     @staticmethod
     @nb.njit(cache=True)
     def delta(a, y, a_prime):
-        return (a - y) * a_prime
+        return (a - y)# * a_prime
 
 
 class LogEntropyCost(_BaseCost):

@@ -255,15 +255,15 @@ class MultilayerPerceptron:
     def _forward_pass(self, activation):
         """Performs a feed-forward to the last layer."""
         activations = [activation]
-        for i in range(self.N_layers - 2):
+        for i in range(self.N_layers - 1):
             z = (self.weights[i] @ activations[i])
             z += self.biases[i]
 
-            # if i+1 != (self.N_layers - 1):
-            #     # activations.append(self._activation.activate(self._fp_core(
-            #     #     self.weights[i], self.biases[i], activations[i])))
-            #     activations.append(self._activation.activate(z))
-            activations.append(self._activation.activate(z))
+            if i+1 != (self.N_layers - 1):
+                # activations.append(self._activation.activate(self._fp_core(
+                #     self.weights[i], self.biases[i], activations[i])))
+                activations.append(self._activation.activate(z))
+            # activations.append(self._activation.activate(z))
 
         # activations.append(self._output_activation.activate(self._fp_core(
         #             self.weights[-1], self.biases[-1], activations[-1])))
@@ -305,7 +305,14 @@ class MultilayerPerceptron:
         # Gets initial delta value, first of the four equations
         delta = self._cost.delta(
             self.activations[-1].T, y,
-            self._output_activation.derivative(self.z[-1]).T).T
+            self._output_activation.derivative(self.z[-1])).T
+
+        # print(y)
+        # print(delta, self.activations[-1].T, self._output_activation.derivative(self.z[-1]))
+        # exit(1)
+        # print(self.activations)
+        # print(dir(self._output_activation), self._output_activation.__class__)
+        # print(delta, self.activations[-1].T,y , self._output_activation.derivative(self.z[-1]))
 
         # Sets last element before back-propagating
         delta_b[-1] = delta
@@ -623,6 +630,8 @@ def __test_nn_sklearn_comparison():
             hidden_layer_sizes=sk_hidden_layers)  # Full NN size is (1,3,3,1).
 
         mlp.out_activation_ = sk_output_activation
+        print(dir(mlp))
+        exit(1)
 
         # Force sklearn to set up all the necessary matrices by fitting a data
         # set. We dont care if it converges or not, so lets ignore raised
@@ -657,8 +666,11 @@ def __test_nn_sklearn_comparison():
 
         # Activates my own MLP
         nn = MultilayerPerceptron(
-            nn_layers, activation=input_activation,
-            output_activation=output_activation, alpha=alpha)
+            nn_layers, 
+            activation=input_activation,
+            output_activation=output_activation, 
+            cost_function="mse",
+            alpha=alpha)
 
         # Copy the weights and biases from the scikit-learn network to your
         # own.
@@ -732,12 +744,12 @@ def __test_nn_sklearn_comparison():
     X_test3 = np.array([np.random.rand(10)])
     y_test3 = np.array([8.29289285])
 
-    # test_regressor(X_train1, y_train1, X_test1, y_test1,
-    #                layer_sizes1, sk_hidden_layers1, "sigmoid", "softmax")
+    test_regressor(X_train1, y_train1, X_test1, y_test1,
+                   layer_sizes1, sk_hidden_layers1, "sigmoid", "softmax")
 
-    # test_regressor(X_train2, y_train2, X_test2, y_test2,
-    #                layer_sizes2, sk_hidden_layers2, "sigmoid", "identity",
-    #                alpha=0.5)
+    test_regressor(X_train2, y_train2, X_test2, y_test2,
+                   layer_sizes2, sk_hidden_layers2, "sigmoid", "identity",
+                   alpha=0.5)
 
     test_regressor(X_train3, y_train3, X_test3, y_test3,
                    layer_sizes3, sk_hidden_layers3, "sigmoid", "sigmoid")
