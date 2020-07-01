@@ -18,7 +18,6 @@ import multiprocessing as mp
 
 __all__ = ["kFoldCrossValidation", "MCCrossValidation"]
 
-# TODO: parallelize kf-CV
 # TODO: parallelize kkf-CV
 # TODO: parallelize mc-kf-CV
 
@@ -143,9 +142,9 @@ class kFoldCrossValidation(__CV_core):
         y_subdata = np.array_split(y_train, k_splits, axis=0)
 
         # Stores the test values from each k trained data set in an array
-        r2_list = np.empty(k_splits)
-        beta_coefs = np.empty((k_splits, y_train.shape[-1], X_test.shape[-1]))
-        self.y_pred_list = np.empty((test_size, k_splits))
+        r2_list = np.empty(k_splits, dtype=float)
+        beta_coefs = np.empty((k_splits, y_train.shape[-1], X_test.shape[-1]), dtype=float)
+        self.y_pred_list = np.empty((test_size, k_splits), dtype=float)
 
         # Sets up set lists
         set_lists = []
@@ -184,7 +183,6 @@ class kFoldCrossValidation(__CV_core):
                                         [y_subdata for i in range(k_splits)],
                                         [X_test for i in range(k_splits)],
                                         [self.reg for i in range(k_splits)]))
-
 
                 # Runs parallel processes
                 # import time
@@ -279,10 +277,10 @@ class kkFoldCrossValidation(__CV_core):
 
         # Sets up some arrays for storing the different MSE, bias, var, R^2
         # scores.
-        mse_arr = np.empty(k_splits)
-        r2_arr = np.empty(k_splits)
-        var_arr = np.empty(k_splits)
-        bias_arr = np.empty(k_splits)
+        mse_arr = np.empty(k_splits, dtype=float)
+        r2_arr = np.empty(k_splits, dtype=float)
+        var_arr = np.empty(k_splits, dtype=float)
+        bias_arr = np.empty(k_splits, dtype=float)
 
         beta_coefs = []
         x_pred_test = []
@@ -315,9 +313,9 @@ class kkFoldCrossValidation(__CV_core):
             y_subdata = np.array_split(y_holdout_train, k_splits, axis=0)
 
             # Stores the test values from each k trained data set in an array
-            r2_list = np.empty(k_splits)
+            r2_list = np.empty(k_splits, dtype=float)
 
-            y_pred_list = np.empty((X_test.shape[0], k_splits))
+            y_pred_list = np.empty((X_test.shape[0], k_splits), dtype=float)
 
             # Loops over all k-k folds, ensuring every fold is used as a
             # holdout set.
@@ -374,8 +372,53 @@ class kkFoldCrossValidation(__CV_core):
 
 class MCCrossValidation(__CV_core):
     """
-    https://stats.stackexchange.com/questions/51416/k-fold-vs-monte-carlo-cross-validation
+    https://stats.stackexchange.com/questions/51416/k-fold-vs-monte-carlo-
+    cross-validation
     """
+
+    @staticmethod
+    # @nb.jit(cache=True)
+    def _mccv_core(input_values):
+        """Core part of the kf-CV."""
+        ik, set_list, X_subdata, y_subdata, X_test, reg, N_mc = input_values
+
+        # # Sets up new data set
+        # k_X_train = np.concatenate([X_subdata[d] for d in set_list])
+        # k_y_train = np.concatenate([y_subdata[d] for d in set_list])
+
+        # # Trains method bu fitting data
+        # reg.fit(k_X_train, k_y_train)
+
+        # # Getting a prediction given the test data
+        # y_predict = reg.predict(X_test).ravel()
+
+        # # Returns prediction and beta coefs
+        # return ik, y_predict, reg.coef_
+
+        y_pred = np.empty((N_mc, *y_subdata.shape[1:]), dtype=float)
+
+        for i_mc in range(N_MC):
+            # Gets retrieves indexes for MC-CV. No replacement.
+            mccv_test_indexes = np.random.choice(mc_indices, mc_test_size)
+            mccv_train_indices = np.array(
+                list(set(mc_indices) - set(mccv_test_indexes)))
+
+            # Sets up new data set
+            # k_x_train = x_mc_train[mccv_train_indices]
+            k_X_train = X_train[mccv_train_indices]
+            k_y_train = y_train[mccv_train_indices]
+
+            # Trains method bu fitting data
+            reg.fit(k_X_train, k_y_train)
+
+            y_predict = reg.predict(X_test)
+
+            # Adds prediction and beta coefs
+            y_pred[:, i_mc] = y_predict.ravel()
+            beta_coefs.append(reg.coef_)
+
+        return ik, y_predict, reg.coef_
+
 
     def cross_validate(self, N_mc, k_splits=4, test_percent=0.2, X_test=None,
                        y_test=None, shuffle=False):
@@ -419,28 +462,71 @@ class MCCrossValidation(__CV_core):
 
         # Stores the test values from each k trained data set in an array
         beta_coefs = []
-        self.y_pred_list = np.empty((y_test.shape[0], N_mc))
+        self.y_pred_list = np.empty((y_test.shape[0], N_mc), dtype=float)
 
-        for i_mc in tqdm(range(N_mc), desc="Monte Carlo Cross Validation"):
+        if self.numprocs == 1:
+            # MC mloop
+            for i_mc in tqdm(range(N_mc), desc="Monte Carlo Cross Validation"):
 
-            # Gets retrieves indexes for MC-CV. No replacement.
-            mccv_test_indexes = np.random.choice(mc_indices, mc_test_size)
-            mccv_train_indices = np.array(
-                list(set(mc_indices) - set(mccv_test_indexes)))
+                # Gets retrieves indexes for MC-CV. No replacement.
+                mccv_test_indexes = np.random.choice(mc_indices, mc_test_size)
+                mccv_train_indices = np.array(
+                    list(set(mc_indices) - set(mccv_test_indexes)))
 
-            # Sets up new data set
-            # k_x_train = x_mc_train[mccv_train_indices]
-            k_X_train = X_train[mccv_train_indices]
-            k_y_train = y_train[mccv_train_indices]
+                # Sets up new data set
+                # k_x_train = x_mc_train[mccv_train_indices]
+                k_X_train = X_train[mccv_train_indices]
+                k_y_train = y_train[mccv_train_indices]
 
-            # Trains method bu fitting data
-            self.reg.fit(k_X_train, k_y_train)
+                # Trains method bu fitting data
+                self.reg.fit(k_X_train, k_y_train)
 
-            y_predict = self.reg.predict(X_test)
+                y_predict = self.reg.predict(X_test)
 
-            # Adds prediction and beta coefs
-            self.y_pred_list[:, i_mc] = y_predict.ravel()
-            beta_coefs.append(self.reg.coef_)
+                # Adds prediction and beta coefs
+                self.y_pred_list[:, i_mc] = y_predict.ravel()
+                beta_coefs.append(self.reg.coef_)
+
+        else:
+            # Initializes multiprocessing
+            with mp.Pool(processes=self.numprocs) as p:
+
+                # Sets up jobs for parallel processing
+                input_values = list(zip(
+                    [X_train for i in range(self.numprocs)],
+                    [y_train for i in range(self.numprocs)],
+                    [X_test for i in range(self.numprocs)],
+                    [self.reg for i in range(self.numprocs)],
+                    [int(N_mc//self.numprocs) for i in range(self.numprocs)]))
+
+                # Runs parallel processes
+                results = p.imap_unordered(self._mccv_core, input_values)
+
+                # Retrieves results
+                for i_kf, res_ in enumerate(results):
+                    self.y_pred_list[:, i_kf] = res_[1]
+                    beta_coefs[i_kf] = res_[2].T
+
+        # for i_mc in tqdm(range(N_mc), desc="Monte Carlo Cross Validation"):
+
+        #     # Gets retrieves indexes for MC-CV. No replacement.
+        #     mccv_test_indexes = np.random.choice(mc_indices, mc_test_size)
+        #     mccv_train_indices = np.array(
+        #         list(set(mc_indices) - set(mccv_test_indexes)))
+
+        #     # Sets up new data set
+        #     # k_x_train = x_mc_train[mccv_train_indices]
+        #     k_X_train = X_train[mccv_train_indices]
+        #     k_y_train = y_train[mccv_train_indices]
+
+        #     # Trains method bu fitting data
+        #     self.reg.fit(k_X_train, k_y_train)
+
+        #     y_predict = self.reg.predict(X_test)
+
+        #     # Adds prediction and beta coefs
+        #     self.y_pred_list[:, i_mc] = y_predict.ravel()
+        #     beta_coefs.append(self.reg.coef_)
 
         # Mean Square Error, mean((y - y_approx)**2)
         _mse = (y_test - self.y_pred_list)**2
@@ -540,8 +626,8 @@ def SKLearnkFoldCV(X, y, reg, k=4, test_percent=0.4,
     #     X, y, test_size=test_percent, shuffle=shuffle)
 
     # Preps lists to be filled
-    y_pred_list = np.empty((y_test.shape[0], k))
-    r2_list = np.empty(k)
+    y_pred_list = np.empty((y_test.shape[0], k), dtype=float)
+    r2_list = np.empty(k, dtype=float)
     beta_coefs = []
 
     # Specifies the number of splits
@@ -721,7 +807,7 @@ def __time_cross_validations():
     import sklearn.preprocessing as sk_preproc
 
     # Initial values
-    n = 1000000
+    n = 100
     N_bs = 4
     deg = 2
     k_splits = 8
@@ -738,40 +824,41 @@ def __time_cross_validations():
     poly = sk_preproc.PolynomialFeatures(degree=deg, include_bias=True)
     X = poly.fit_transform(x)
 
-    # k-fold Cross validation
-    t0_kfcv_mp = time.time()
-    kfcv = kFoldCrossValidation(X, y, OLSRegression(), numprocs=numprocs)
-    kfcv.cross_validate(k_splits=k_splits,
-                        test_percent=test_percent)
-    t1_kfcv_mp = time.time()
+    # # k-fold Cross validation
+    # t0_kfcv_mp = time.time()
+    # kfcv = kFoldCrossValidation(X, y, OLSRegression(), numprocs=numprocs)
+    # kfcv.cross_validate(k_splits=k_splits,
+    #                     test_percent=test_percent)
+    # t1_kfcv_mp = time.time()
 
-    # k-fold Cross validation no parallelization
-    t0_kfcv = time.time()
-    kfcv = kFoldCrossValidation(X, y, OLSRegression(), numprocs=1)
-    kfcv.cross_validate(k_splits=k_splits,
-                        test_percent=test_percent)
-    t1_kfcv = time.time()
+    # # k-fold Cross validation no parallelization
+    # t0_kfcv = time.time()
+    # kfcv = kFoldCrossValidation(X, y, OLSRegression(), numprocs=1)
+    # kfcv.cross_validate(k_splits=k_splits,
+    #                     test_percent=test_percent)
+    # t1_kfcv = time.time()
 
-    # k-k-fold Cross validation
-    t0_kkfcv = time.time()
-    kkfcv = kkFoldCrossValidation(X, y, OLSRegression())
-    kkfcv.cross_validate(k_splits=k_splits,
-                         test_percent=test_percent)
-    t1_kkfcv = time.time()
+    # # k-k-fold Cross validation
+    # t0_kkfcv = time.time()
+    # kkfcv = kkFoldCrossValidation(X, y, OLSRegression())
+    # kkfcv.cross_validate(k_splits=k_splits,
+    #                      test_percent=test_percent)
+    # t1_kkfcv = time.time()
 
     # mc Cross validation
     t0_mccv = time.time()
-    mccv = MCCrossValidation(X, y, OLSRegression())
+    mccv = MCCrossValidation(X, y, OLSRegression(), numprocs=numprocs)
     mccv.cross_validate(N_bs, k_splits=k_splits,
                         test_percent=test_percent)
     t1_mccv = time.time()
 
     print("**Non-parallel**")
-    print("Time taken for kf-cv:  {:.8f} seconds".format(t1_kfcv-t0_kfcv))
-    print("Time taken for kkf-cv: {:.8f} seconds".format(t1_kkfcv-t0_kkfcv))
+    # print("Time taken for kf-cv:  {:.8f} seconds".format(t1_kfcv-t0_kfcv))
+    # print("Time taken for kkf-cv: {:.8f} seconds".format(t1_kkfcv-t0_kkfcv))
     print("Time taken for mc-cv:  {:.8f} seconds".format(t1_mccv-t0_mccv))
     print("**Parallelized**")
-    print("Time taken for kf-cv:  {:.8f} seconds".format(t1_kfcv_mp-t0_kfcv_mp))
+    # print(
+    #     "Time taken for kf-cv:  {:.8f} seconds".format(t1_kfcv_mp-t0_kfcv_mp))
 
 
 def __test_cross_validation_methods():
@@ -989,9 +1076,9 @@ def __test_bias_variance_kkfcv():
 def __test_bias_variance_mccv():
     # """Checks bias-variance relation."""
     from regression import OLSRegression
-    # import sklearn.linear_model as sk_model
-    # import sklearn.preprocessing as sk_preproc
-    # import matplotlib.pyplot as plt
+    import sklearn.linear_model as sk_model
+    import sklearn.preprocessing as sk_preproc
+    import matplotlib.pyplot as plt
 
     # Initial values
     N_polynomials = 30

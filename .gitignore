@@ -10,3 +10,7 @@ __pycache__*
 *.log
 *.out
 *.gz
+
+# Random folders
+*cnn_model*
+scratch/cnn_output_logs

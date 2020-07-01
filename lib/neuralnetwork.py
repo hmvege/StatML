@@ -19,7 +19,7 @@ import numba as nb
 # TODO: implement the use of all cost functions for any output activation.
 # TODO: vectorize mini batch procedure.
 # TODO: parallelize the mini batch procedure.
-
+# TODO: create yml file for conda env
 
 def plot_image(sample_, label, pred):
     """Simple function for plotting the input."""
@@ -487,9 +487,10 @@ class MultilayerPerceptron:
         results = []
         for test, label in zip(test_data, test_labels):
             pred = self.predict(np.atleast_2d(test))
-            results.append(int(np.argmax(pred) == np.argmax(label)))
+            prediction_bool = int(np.argmax(pred) == np.argmax(label))
+            results.append(prediction_bool)
 
-            if show_image:
+            if show_image or not prediction_bool:
                 plot_image(test, np.argmax(label), np.argmax(pred))
 
         return results
@@ -511,7 +512,6 @@ class MultilayerPerceptron:
 
 
 def __test_mlp_mnist():
-    import gzip
     import pickle
 
     test_data_path = "../datafiles/HandwritingClassification/mnist.pkl"
@@ -562,7 +562,7 @@ def __test_mlp_mnist():
     alpha = 0.0
     regularization = "l2"
     mini_batch_size = 20
-    epochs = 10
+    epochs = 100
     eta = "inverse"  # Options: float, 'inverse'
     eta0 = 1.0
     verbose = True
